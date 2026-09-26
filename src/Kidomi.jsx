@@ -49,8 +49,8 @@ export default function Kidomi({ onNext }) {
           I was waiting in line to order food at a food court in Korea, and I saw a grandma struggling with the kiosk. She was completely lost, so I ended up helping her with her order. That sparked a question: what is the experience of senior citizens with self-service machines?
         </P>
         <Cols n={3}>
-          <Frame src={K + 'kiosk1.png'} alt="A man using a self-ordering kiosk" max={320} />
-          <Frame src={K + 'kiosk2.png'} alt="Another kiosk in a Korean restaurant" max={320} />
+          <Frame src={K + 'kiosk1.jpg'} alt="A man using a self-ordering kiosk" max={320} />
+          <Frame src={K + 'kiosk2.jpg'} alt="Another kiosk in a Korean restaurant" max={320} />
           <Frame src={K + 'context.jpeg'} alt="Kiosk ordering in a restaurant" max={320} />
         </Cols>
         <Callout>

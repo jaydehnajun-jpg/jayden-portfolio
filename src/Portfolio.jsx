@@ -8,6 +8,7 @@ import Zuora from "./Zuora.jsx";
 import Colorful from "./Colorful.jsx";
 import Kidomi from "./Kidomi.jsx";
 import UsabilityStudy from "./UsabilityStudy.jsx";
+import { AnimImg } from "./caseKit.jsx";
 
 // Fades and lifts each case-study section's blocks into view as they scroll on screen.
 function ScrollReveal({ children }) {
@@ -375,8 +376,8 @@ function BentoTile({ item, onOpen }) {
       {item.nda ? (
         <div className="bento-nda"><span>Under NDA</span></div>
       ) : (
-      <img
-        src={item.src.startsWith('/') ? item.src : `/assets/Archive/${item.src}`} alt={item.title} loading="lazy"
+      <AnimImg
+        src={item.src.startsWith('/') ? item.src : `/assets/Archive/${item.src}`} alt={item.title}
         className={`bento-img${item.matte ? ' is-matte' : ''}`}
       />
       )}
@@ -419,10 +420,10 @@ function ArchiveDetail({ item, onClose }) {
         )}
         {media.map((m, i) => Array.isArray(m) ? (
           <div key={i} className="ad-row" style={{ gridTemplateColumns: `repeat(${m.length},minmax(0,1fr))` }}>
-            {m.map((f) => <img key={f} src={archiveSrc(f)} alt="" className="ad-img" loading="lazy" />)}
+            {m.map((f) => <AnimImg key={f} src={archiveSrc(f)} alt="" className="ad-img" />)}
           </div>
         ) : (
-          <img key={m} src={archiveSrc(m)} alt={i === 0 ? item.title : ''} className="ad-img" loading="lazy" />
+          <AnimImg key={m} src={archiveSrc(m)} alt={i === 0 ? item.title : ''} className="ad-img" />
         ))}
         {item.video && (
           <div className="ad-video">

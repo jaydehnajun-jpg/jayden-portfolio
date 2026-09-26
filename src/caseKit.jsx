@@ -47,6 +47,13 @@ const GRID = {
 
 export const Sq = ({ size = 6 }) => <span style={{ width: size, height: size, background: 'var(--acc)', flexShrink: 0, display: 'inline-block' }} />;
 
+// An image, or, for .gif sources, the .mp4 with the same name playing as a silent loop (same look,
+// a tenth of the download size). Drop-in for <img>.
+export const AnimImg = ({ src, alt = '', ...rest }) =>
+  /\.gif$/i.test(src)
+    ? <video src={src.replace(/\.gif$/i, '.mp4')} autoPlay loop muted playsInline preload="metadata" aria-label={alt} {...rest} />
+    : <img src={src} alt={alt} {...rest} />;
+
 // ── Text ─────────────────────────────────────────────────
 
 export const P = ({ children }) => <p style={{ ...TYPE.body, color: MID, maxWidth: 640 }}>{children}</p>;
@@ -79,7 +86,7 @@ export const Tag = ({ children, tone }) => {
 // `wide` stretches the image to the full column width; `tint` sets it on a colored panel.
 export const Frame = ({ src, alt = '', caption, max = 380, panel, wide, tint, children, style }) => {
   const media = src
-    ? <img src={src} alt={alt} style={{ maxWidth: '100%', maxHeight: wide ? undefined : (panel ? panel - 48 : max), width: wide ? '100%' : 'auto', height: 'auto', display: 'block', mixBlendMode: 'multiply' }} />
+    ? <AnimImg src={src} alt={alt} style={{ maxWidth: '100%', maxHeight: wide ? undefined : (panel ? panel - 48 : max), width: wide ? '100%' : 'auto', height: 'auto', display: 'block', mixBlendMode: 'multiply' }} />
     : children;
   return (
     <figure style={{ margin: 0, width: '100%', ...style }}>
