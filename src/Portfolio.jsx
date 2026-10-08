@@ -37,10 +37,10 @@ const ADOBE_IMG = "/assets/Adobe/claudexadobe.webp";
 const SKILLSHARE_VID = "/assets/ClassDiscovery/classdiscoveryvid.mp4";
 const ONBOARDING_VID = "/assets/Onboarding/onboardingvid.mp4";
 
-const BIO = "Jayden is a product designer who previously interned at Adobe on the Agents team, designing gen AI experiences, and worked as an associate product designer at Skillshare. Studied at USC and the University of Washington.";
+const BIO = "Jayden is an AI-native product designer. Adobe taught her to build gen AI experiences. Skillshare taught her to love B2C, watching real learners use what she made. Currently a Masters candidate at UW HCDE and a design graduate of USC.";
 const NAME = 'Jayden';
 const NAME_COLOR = '#1A1A18';
-const BRAND_COLORS = { Adobe: '#E3000F', Skillshare: '#00A86B', USC: '#990000', 'University of Washington': '#4B2E83' };
+const BRAND_COLORS = { Adobe: '#E3000F', Skillshare: '#00A86B', USC: '#990000', 'University of Washington': '#4B2E83', UW: '#4B2E83' };
 const BRAND_NAMES = Object.keys(BRAND_COLORS);
 const HIGHLIGHT_COLORS = { [NAME]: NAME_COLOR, ...BRAND_COLORS };
 const HIGHLIGHTS = Object.keys(HIGHLIGHT_COLORS);
@@ -483,6 +483,12 @@ function ArchiveGrid({ modalSlug, onOpenModal, onCloseModal, onOpenPage }) {
 // originals next to them are several MB each). Photos keep their own aspect ratio. To add more,
 // drop a resized file in web/ and add its name to HOBBY_PHOTOS. ──
 const ABOUT_DOT = { Adobe: '#E3000F', Skillshare: '#00A86B', 'University of Washington': '#4B2E83', 'University of Southern California': '#990000' };
+// About story, split into short paragraphs for readability.
+const ABOUT_STORY = [
+  "As a kid, I stayed up past bedtime making miniature food, chasing every tiny detail. That love of craft followed me into design. In college I studied visual branding and loved the storytelling, but it felt one-sided. I made things, and that was it.",
+  "Then I interned at Skillshare, launched my first real interaction, and watched people actually use it. That was the first time I realized there was a real person on the other end. Visual design felt like a monologue. UX felt like a conversation. I build something, people respond, I respond back, and I fell for that loop. At Adobe, I got to design the conversation itself, shaping how generative AI agents work with other tools and behave in ways people can trust. With AI, that loop is faster than ever.",
+  "Listening is what I care about most, and it's personal. I know what it's like to feel left out of a design that wasn't built with me in mind, so I try to make things that work for everyone, without anyone noticing the effort.",
+];
 const PROFILE_IMG = '/assets/About/web/profile.jpg';
 // A few pottery, painting and baking photos in one calm, static row. Widths follow each photo's
 // aspect ratio (`a`) so every photo is the same height and none are cropped.
@@ -888,7 +894,7 @@ export default function Portfolio() {
         @font-face{font-family:'DreamHeumul';src:url('/fonts/DreamHeumulKR.ttf') format('truetype');font-display:swap}
         .about-name{font-family:'DreamHeumul',cursive;font-size:52px;font-weight:400;letter-spacing:0;line-height:1.1}
         .about-tagline{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
-        .about-bio{font-size:17px;line-height:1.8;color:var(--text-mid);max-width:560px}
+        .about-bio{font-size:17px;line-height:1.8;color:var(--text-mid);max-width:640px}
 
         /* plain resume rows — company, title, date. nothing else. */
         .ad{position:fixed;inset:0;z-index:4000;background:rgba(26,26,24,.5);display:flex;align-items:center;justify-content:center;padding:32px 16px;animation:adIn .25s ease}
@@ -999,10 +1005,7 @@ export default function Portfolio() {
           <div className="about-hero-text">
             <h1 className="about-name">Jayden Kang</h1>
             <span className="about-tagline">Product Designer · Inclusive UX · Systems Thinking</span>
-            <p className="about-bio">
-              Former Experience Design intern on Adobe's Agents team. I like design systems, accessible-by-default UI,
-              and building things that feel a little alive.
-            </p>
+            {ABOUT_STORY.map((para, i) => <p className="about-bio" key={i}>{para}</p>)}
           </div>
         </div>
 
