@@ -483,11 +483,36 @@ function ArchiveGrid({ modalSlug, onOpenModal, onCloseModal, onOpenPage }) {
 // originals next to them are several MB each). Photos keep their own aspect ratio. To add more,
 // drop a resized file in web/ and add its name to HOBBY_PHOTOS. ──
 const ABOUT_DOT = { Adobe: '#E3000F', Skillshare: '#00A86B', 'University of Washington': '#4B2E83', 'University of Southern California': '#990000' };
-// About story, split into short paragraphs for readability.
+// Small pixel-art illustrations for the About story (same square-pixel language as the rest of the site).
+// They sit inline in the paragraph, exactly one line tall (14 grid rows = 1.75em = the text's line-height),
+// with the drawing centered inside that box.
+const ART_ROWS = 14;
+function PixelArt({ rows, palette }) {
+  const w = Math.max(...rows.map((r) => r.length));
+  const top = Math.floor((ART_ROWS - rows.length) / 2);
+  return (
+    <svg className="px-inline" style={{ width: `${(w / ART_ROWS) * 1.75}em` }} viewBox={`0 0 ${w} ${ART_ROWS}`} shapeRendering="crispEdges" aria-hidden="true">
+      {rows.flatMap((row, y) => [...row].map((c, x) => (palette[c] ? <rect key={`${x}-${y}`} x={x} y={y + top} width="1" height="1" fill={palette[c]} /> : null)))}
+    </svg>
+  );
+}
+const ART_CUPCAKE = {
+  palette: { r: '#E0455B', p: '#F7B2C4', s: '#FFFFFF', w: '#E9A23B', v: '#D2891F' },
+  rows: ['......r.....', '.....rr.....', '....pppp....', '...pppppp...', '..pppppppp..', '..ppsppsps..', '..wvwvwvwv..', '..wvwvwvwv..', '...wvwvwv...', '...wvwvwv...', '....wvwv....'],
+};
+const ART_CHAT = {
+  palette: { a: '#00A86B', b: '#4B2E83', w: '#FFFFFF' },
+  rows: ['aaaaaaaa......', 'aawawawa......', 'aaaaaaaa......', 'aa............', '......bbbbbbbb', '......bwbwbwbb', '......bbbbbbbb', '..........bb..'],
+};
+const ART_HEART = {
+  palette: { r: '#E0455B' },
+  rows: ['.rr...rr.', 'rrrr.rrrr', 'rrrrrrrrr', 'rrrrrrrrr', '.rrrrrrr.', '..rrrrr..', '...rrr...', '....r....'],
+};
+// About story: three short paragraphs; the pixel illustrations sit mid-sentence like inline icons.
 const ABOUT_STORY = [
-  "As a kid, I stayed up past bedtime making miniature food, chasing every tiny detail. That love of craft followed me into design. In college I studied visual branding and loved the storytelling, but it felt one-sided. I made things, and that was it.",
-  "Then I interned at Skillshare, launched my first real interaction, and watched people actually use it. That was the first time I realized there was a real person on the other end. Visual design felt like a monologue. UX felt like a conversation. I build something, people respond, I respond back, and I fell for that loop. At Adobe, I got to design the conversation itself, shaping how generative AI agents work with other tools and behave in ways people can trust. With AI, that loop is faster than ever.",
-  "Listening is what I care about most, and it's personal. I know what it's like to feel left out of a design that wasn't built with me in mind, so I try to make things that work for everyone, without anyone noticing the effort.",
+  ["As a kid, I stayed up past bedtime making tiny ", ART_CUPCAKE, " food, chasing every detail. That love of craft followed me into design. In college I studied visual branding and loved the storytelling, but it felt one-sided."],
+  ["Then at Skillshare, I launched my first real interaction and watched people use it. Suddenly there was a real person on the other end. UX felt like a ", ART_CHAT, " conversation. I build something, people respond, I respond back, and I fell for that loop. At Adobe, I got to design the conversation itself, shaping how generative AI agents behave in ways people can trust."],
+  ["Listening is what I care about most, and it's personal. I know what it's like to be left out of a design that wasn't built with me in mind, so I make things that work for ", ART_HEART, " everyone, without anyone noticing the effort."],
 ];
 const PROFILE_IMG = '/assets/About/web/profile.jpg';
 // A few pottery, painting and baking photos in one calm, static row. Widths follow each photo's
@@ -888,13 +913,14 @@ export default function Portfolio() {
         .wf-block{background:rgba(26,26,24,.06);border:1px solid var(--border)}
         .wf-divider{height:1px;background:var(--border)}
 
-        .about-hero{display:flex;gap:32px;align-items:flex-start}
-        .about-photo{width:260px;aspect-ratio:4/5;object-fit:cover;object-position:center 42%;flex-shrink:0;display:block}
+        .about-hero{display:flex;gap:40px;align-items:stretch}
+        .about-photo{width:320px;height:auto;align-self:stretch;object-fit:cover;object-position:center 38%;flex-shrink:0;display:block}
         .about-hero-text{flex:1;padding-top:4px;display:flex;flex-direction:column;gap:10px}
         @font-face{font-family:'DreamHeumul';src:url('/fonts/DreamHeumulKR.ttf') format('truetype');font-display:swap}
         .about-name{font-family:'DreamHeumul',cursive;font-size:52px;font-weight:400;letter-spacing:0;line-height:1.1}
         .about-tagline{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
-        .about-bio{font-size:17px;line-height:1.8;color:var(--text-mid);max-width:640px}
+        .about-bio{font-size:16px;line-height:1.75;color:var(--text-mid);max-width:620px}
+        .px-inline{display:inline-block;height:1.75em;vertical-align:top;margin:0 .1em}
 
         /* plain resume rows — company, title, date. nothing else. */
         .ad{position:fixed;inset:0;z-index:4000;background:rgba(26,26,24,.5);display:flex;align-items:center;justify-content:center;padding:32px 16px;animation:adIn .25s ease}
@@ -936,7 +962,7 @@ export default function Portfolio() {
           .about-page{padding:calc(var(--top) + 32px) 24px 60px}
           .floating-nav{top:24px;left:24px}
           .about-hero{flex-direction:column}
-          .about-photo{width:200px}
+          .about-photo{width:220px;height:auto;aspect-ratio:4/5;align-self:flex-start}
           .about-item{flex-direction:column;gap:4px}
           .about-sec{grid-template-columns:1fr;gap:20px}
           .hobby-row{flex-wrap:wrap}
@@ -1005,7 +1031,11 @@ export default function Portfolio() {
           <div className="about-hero-text">
             <h1 className="about-name">Jayden Kang</h1>
             <span className="about-tagline">Product Designer · Inclusive UX · Systems Thinking</span>
-            {ABOUT_STORY.map((para, i) => <p className="about-bio" key={i}>{para}</p>)}
+            {ABOUT_STORY.map((segs, i) => (
+              <p className="about-bio" key={i}>
+                {segs.map((seg, j) => (typeof seg === 'string' ? seg : <PixelArt key={j} {...seg} />))}
+              </p>
+            ))}
           </div>
         </div>
 
