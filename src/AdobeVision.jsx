@@ -23,7 +23,7 @@ export default function AdobeVision({ onNext }) {
       note={
         <div style={{ display: 'flex', gap: 14, alignItems: 'baseline', border: `1px solid ${LINE}`, padding: '16px 20px' }}>
           <span style={{ ...TYPE.label, color: 'var(--acc)' }}>NDA</span>
-          <span style={{ ...TYPE.small, color: 'rgba(26,26,24,.6)' }}>This work is under a confidentiality agreement, so details and visuals are abstracted on purpose. The animation above shows the process only, not the product or the idea.</span>
+          <span style={{ ...TYPE.small, color: 'rgba(26,26,24,.6)' }}>This work is under a confidentiality agreement, so details and visuals are abstracted on purpose. The animation above is a generic illustration, not the product or the idea.</span>
         </div>
       }
       sections={SECTIONS}

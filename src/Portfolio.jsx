@@ -922,20 +922,20 @@ export default function Portfolio() {
         .card-img-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
         .card-img{width:100%;height:100%;display:block}
         .af{background:#E5E1D9}
-        .af-anim{position:relative;width:70%;aspect-ratio:16/10}
+        .af-anim{position:relative;width:84%;aspect-ratio:16/10}
         .card-tags{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;font-size:12.5px;line-height:1.4;color:var(--text-mid);margin-bottom:6px}
         .card-tags span{display:inline-flex;align-items:center;gap:10px}
         .card-tags i{width:5px;height:5px;background:#bdb8b0;flex:none}
         .card-badge{position:absolute;top:16px;left:16px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;background:rgba(245,242,238,.95);color:#1A1A18;padding:5px 10px;border-radius:20px}
 
-        .card-body{padding:20px 2px 0;max-width:560px}
+        .card-body{padding:20px 2px 0;container-type:inline-size}
         .card-company{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-mid);display:inline-flex;align-items:center;gap:7px;margin-bottom:8px}
         /* Active-card indicator — brand-colored per card (set inline via c.color), dimmed until
            this card is the one nearest viewport-center */
         .pixel-bullet{display:inline-block;width:6px;height:6px;flex-shrink:0;opacity:.4;transition:opacity .2s}
         .pixel-bullet.is-active{opacity:1}
-        .card-title{font-size:clamp(19px,1.8vw,24px);font-weight:700;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
-        .card-desc{font-size:12.5px;line-height:1.6;color:var(--text-mid);margin-bottom:14px}
+        .card-title{font-size:clamp(15px,2.9cqw,24px);text-wrap:balance;font-weight:700;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
+        .card-desc{max-width:560px;font-size:12.5px;line-height:1.6;color:var(--text-mid);margin-bottom:14px}
         .card-metrics{display:flex;gap:20px;padding-top:12px;border-top:1px solid rgba(26,26,24,.08)}
         .metric{display:flex;flex-direction:column;gap:2px}
         .card-val{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--text)}
