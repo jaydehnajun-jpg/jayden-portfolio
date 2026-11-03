@@ -43,7 +43,7 @@ export default function Zuora({ onNext }) {
         ['Enhanced Onboarding', 'For new analysts'],
       ] }}
       sections={SECTIONS}
-      next={{ eyebrow: 'Back to', title: 'Archive', cta: 'Back to archive', onNext }}
+      next={{ eyebrow: 'Back to', title: 'Experimentation', cta: 'Back to experimentation', onNext }}
     >
       <Section id="problem" title="Inconsistencies creating barriers.">
         <P>

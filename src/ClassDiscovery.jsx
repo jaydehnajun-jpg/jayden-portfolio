@@ -29,7 +29,7 @@ export default function ClassDiscovery({ onNext }) {
     <CaseLayout
       accent="#00A86B"
       tags={['Skillshare', 'Interaction Design', 'UX Research']}
-      title="Class Discovery Redesign"
+      title="Redesigning How Learners Choose a Class."
       subtitle="A redesign of how learners choose a class, built around how people actually decide instead of guessing and bouncing."
       hero={<Frame src={I.hero} alt="Class discovery redesign mockup" max={400} />}
       meta={[
@@ -44,7 +44,7 @@ export default function ClassDiscovery({ onNext }) {
         ['Usability Testing', 'Designed and ran an unmoderated Maze test with 183 participants'],
       ] }}
       sections={SECTIONS}
-      next={{ title: 'Onboarding & Member Home', onNext }}
+      next={{ title: 'Helping New Members Take Their First Step Faster.', onNext }}
     >
       <Section id="problem" title="Users were flying blind.">
         <Callout>

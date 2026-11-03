@@ -42,7 +42,7 @@ export default function Kidomi({ onNext }) {
         ['Methods', 'Guerrilla interviews · Wireframing · Prototyping'],
       ]}
       sections={SECTIONS}
-      next={{ eyebrow: 'Back to', title: 'Archive', cta: 'Back to archive', onNext }}
+      next={{ eyebrow: 'Back to', title: 'Experimentation', cta: 'Back to experimentation', onNext }}
     >
       <Section id="overview" title="It all began with an encounter.">
         <P>

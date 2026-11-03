@@ -2,12 +2,15 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import ClassDiscovery from "./ClassDiscovery.jsx";
 import Onboarding from "./Onboarding.jsx";
 import AACDevice from "./AACDevice.jsx";
-import Adobe from "./Adobe.jsx";
+import AdobeTooling from "./AdobeTooling.jsx";
+import AdobeVision from "./AdobeVision.jsx";
 import GoogleMaps from "./GoogleMaps.jsx";
 import Zuora from "./Zuora.jsx";
 import Colorful from "./Colorful.jsx";
 import Kidomi from "./Kidomi.jsx";
 import UsabilityStudy from "./UsabilityStudy.jsx";
+import AdobeAnim from "./AdobeAnim.jsx";
+import AdobeVisionAnim from "./AdobeVisionAnim.jsx";
 import { AnimImg } from "./caseKit.jsx";
 
 // Fades and lifts each case-study section's blocks into view as they scroll on screen.
@@ -33,7 +36,6 @@ function ScrollReveal({ children }) {
   return <div ref={ref}>{children}</div>;
 }
 
-const ADOBE_IMG = "/assets/Adobe/claudexadobe.webp";
 const SKILLSHARE_VID = "/assets/ClassDiscovery/classdiscoveryvid.mp4";
 const ONBOARDING_VID = "/assets/Onboarding/onboardingvid.mp4";
 
@@ -45,13 +47,13 @@ const BRAND_NAMES = Object.keys(BRAND_COLORS);
 const HIGHLIGHT_COLORS = { [NAME]: NAME_COLOR, ...BRAND_COLORS };
 const HIGHLIGHTS = Object.keys(HIGHLIGHT_COLORS);
 
-function Bio({ text }) {
+function Bio({ text, hot }) {
   const pattern = new RegExp(`(${HIGHLIGHTS.join('|')})`, 'g');
   return (
     <p className="intro-text">
       {text.split(pattern).map((chunk, i) =>
         HIGHLIGHTS.includes(chunk) ? (
-          <span key={i} className="brand">
+          <span key={i} className={`brand${chunk === hot ? ' is-hot' : ''}`} style={chunk === hot ? { color: HIGHLIGHT_COLORS[chunk] } : undefined}>
             <span className="pixel-bullet is-active" style={{ background: HIGHLIGHT_COLORS[chunk] }} />
             {chunk}
           </span>
@@ -83,6 +85,11 @@ const Media = ({ src, fit, bg }) => (
   </div>
 );
 
+// Card media: a dark frame with a smaller animation centered in it.
+const AnimFrame = ({ children }) => (
+  <div className="card-img-wrap af"><div className="af-anim">{children}</div></div>
+);
+
 const MediaVideo = ({ src, fit, bg }) => (
   <div className="card-img-wrap" style={{ background: bg }}>
     <video
@@ -100,30 +107,27 @@ const MediaVideo = ({ src, fit, bg }) => (
 const CARDS = [
   {
     company: 'Adobe', color: '#E3000F',
-    title: 'Designing for Gen AI Experiences',
-    desc: "Experience Design intern on Adobe's Agents team. Worked on how generative AI agents integrate with third-party tools and keep their behavior consistent and predictable. Details under NDA.",
-    media: <Media src={ADOBE_IMG} fit="contain" bg="#EA1001" />,
+    title: "Connecting Adobe's AI Agents to the Tools You Already Use.",
+    tags: ['Adobe Internship', 'Under NDA'],
+    media: <AnimFrame><AdobeAnim /></AnimFrame>,
+  },
+  {
+    company: 'Adobe', color: '#E3000F',
+    title: "Shaping a Future Vision for Adobe's AI Agents.",
+    tags: ['Adobe Internship', 'Future Vision', 'Pitched'],
+    media: <AnimFrame><AdobeVisionAnim /></AnimFrame>,
   },
   {
     company: 'Skillshare', color: '#00A86B',
-    title: 'Class Discovery Redesign',
-    desc: 'Progressive disclosure redesign grounded in a 2,277-user survey and 183-person Maze test. Rolled out to 100% of users.',
-    metrics: [{ val: '+47%', label: 'Subscriptions' }, { val: '+5%', label: 'CTR' }],
+    title: 'Redesigning How Learners Choose a Class.',
+    tags: ['+47% Subscriptions', 'Shipped'],
     media: <MediaVideo src={SKILLSHARE_VID} fit="cover" bg="#F5F2EE" />,
   },
   {
     company: 'Skillshare', color: '#00A86B',
-    title: 'Onboarding & Member Home',
-    desc: 'Led activation and retention redesign as sole designer, including an AI-assisted design system built with Figma MCP.',
-    metrics: [{ val: '+4.3pp', label: 'Retention' }, { val: '−26%', label: 'Time-to-Action' }],
+    title: 'Helping New Members Take Their First Step Faster.',
+    tags: ['+4.3pp Retention', 'Shipped'],
     media: <MediaVideo src={ONBOARDING_VID} fit="cover" bg="#C2CBBC" />,
-  },
-  {
-    company: 'UW RAISE × Amazon', color: '#4B2E83',
-    title: 'AI AAC Device',
-    desc: 'Schedule-first AI communication tool for autistic children. Built with v0.dev, validated with 19 caregivers, presented at Amazon AI conference.',
-    metrics: [{ val: '19', label: 'Caregivers' }, { val: '1st', label: 'AI Conference' }],
-    media: <Media src="/assets/AAC/aacmain.png" fit="contain" bg="#fff" />,
   },
 ];
 
@@ -134,7 +138,7 @@ function PageNav({ page, goHome, goArchive, goAbout }) {
   return (
     <nav className="rail-nav" aria-label="Primary">
       <a href="#work-0" className={`rail-nav-link pixel-underline${page === 'home' || page === 'case' ? ' is-current' : ''}`} onClick={goHome('work-0')}>Work</a>
-      <a href="#archive" className={`rail-nav-link pixel-underline${page === 'archive' || ARCHIVE_PAGE_KEYS.includes(page) ? ' is-current' : ''}`} onClick={goArchive}>Archive</a>
+      <a href="#experimentation" className={`rail-nav-link pixel-underline${page === 'archive' || ARCHIVE_PAGE_KEYS.includes(page) ? ' is-current' : ''}`} onClick={goArchive}>Experimentation</a>
       <a href="#about" className={`rail-nav-link pixel-underline${page === 'about' ? ' is-current' : ''}`} onClick={goAbout}>About</a>
     </nav>
   );
@@ -143,10 +147,32 @@ function PageNav({ page, goHome, goArchive, goAbout }) {
 // ── Left column: just the intro now — primary nav lives in a fixed-position element rendered
 // once at the Portfolio level (see .floating-nav) so it sits at the exact same screen position
 // on every page, rather than living inside this page-specific column. ──
-function SideRail() {
+// Small label that follows the pointer over a project card, in that project's color.
+function CardCursor() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || window.matchMedia('(hover: none)').matches) return;
+    let raf = null, x = 0, y = 0;
+    const move = (e) => {
+      x = e.clientX; y = e.clientY;
+      if (!raf) raf = requestAnimationFrame(() => { raf = null; el.style.transform = `translate(${x + 16}px, ${y + 18}px)`; });
+      const card = e.target.closest && e.target.closest('.card');
+      el.classList.toggle('on', !!card);
+      if (card) el.style.setProperty('--c', card.dataset.color || '#111');
+    };
+    const leave = () => el.classList.remove('on');
+    window.addEventListener('mousemove', move);
+    document.addEventListener('mouseleave', leave);
+    return () => { window.removeEventListener('mousemove', move); document.removeEventListener('mouseleave', leave); };
+  }, []);
+  return <div className="card-cursor" ref={ref} aria-hidden="true"><div><i />View case study</div></div>;
+}
+
+function SideRail({ hot }) {
   return (
     <aside className="rail">
-      <Bio text={BIO} />
+      <Bio text={BIO} hot={hot} />
     </aside>
   );
 }
@@ -208,7 +234,7 @@ function WorkStack({ activeIdx, onActiveChange, onOpenCase }) {
     <div className="stack">
       {CARDS.map((c, i) => (
         <div
-          key={i} id={`work-${i}`} ref={el => cardRefs.current[i] = el} className="card"
+          key={i} id={`work-${i}`} ref={el => cardRefs.current[i] = el} className="card" data-color={c.color}
           role="link" tabIndex={0} aria-label={`${c.company}: ${c.title}`}
           onClick={() => onOpenCase(i)}
           onKeyDown={(e) => { if (e.key === 'Enter') onOpenCase(i); }}
@@ -220,12 +246,7 @@ function WorkStack({ activeIdx, onActiveChange, onOpenCase }) {
           <div className="card-body">
             <span className="card-company"><span className={`pixel-bullet${i === activeIdx ? ' is-active' : ''}`} style={{ background: c.color }} />{c.company}</span>
             <h3 className="card-title">{c.title}</h3>
-            <p className="card-desc">{c.desc}</p>
-            {c.metrics && (
-              <div className="card-metrics">
-                {c.metrics.map((m, j) => (<div key={j} className="metric"><span className="card-val">{m.val}</span><span className="card-label">{m.label}</span></div>))}
-              </div>
-            )}
+            <p className="card-tags">{c.tags.map((t, j) => <span key={t}>{j > 0 && <i />}{t}</span>)}</p>
           </div>
         </div>
       ))}
@@ -312,6 +333,7 @@ const ARCHIVE_ROWS = [
   ],
   [
     { src: 'zuorathum.png',    a: 712 / 400,  title: 'Zuora Design System', tag: 'Systems', page: 'zuora' },
+    { src: '/assets/AAC/aacmain-tile.png', a: 1049 / 757, title: 'AI AAC Device', tag: 'UW × Amazon RAISE', page: 'aac' },
     { src: 'carcolor.gif',     a: 1,          title: 'Car Color Selection', tag: 'Spatial Interaction', slug: 'car-color-selection', desc: 'A spatial interaction experiment.' },
   ],
   [
@@ -327,6 +349,21 @@ const ARCHIVE_ROWS = [
       meta: 'April 2023 · Advanced Typography class · FontForge, Illustrator, Procreate',
       desc: 'In my Advanced Typography class, I created a new typeface that focused on the different possibilities of descenders and strokes.',
       assets: ['/assets/Glyqlo/g19.png', '/assets/Glyqlo/g14.png', '/assets/Glyqlo/g15.png', '/assets/Glyqlo/g16.png', '/assets/Glyqlo/g17.png', '/assets/Glyqlo/g18.png'],
+    },
+  ],
+  [
+    {
+      src: '/assets/Experiments/IMG_6438.jpg', a: 3 / 4, title: 'Laser-Cut Dot Slider', tag: 'Physical Prototype', slug: 'laser-cut-dot-slider',
+      meta: 'Laser-cut wood',
+      desc: 'A laser-cut wooden object with a dot-matrix engraving and a sliding knob.',
+      assets: ['/assets/Experiments/IMG_6438.jpg'],
+      mp4: '/assets/Experiments/IMG_6440.mp4',
+    },
+    {
+      src: '/assets/Experiments/IMG_6147.jpg', a: 3 / 4, title: 'Laser-Cut Modular Shelf', tag: 'Physical Prototype', slug: 'laser-cut-modular-shelf',
+      meta: 'Laser-cut wood',
+      desc: 'A modular wooden shelf with interlocking panels and patterned cutouts, cut on a laser cutter.',
+      assets: ['/assets/Experiments/IMG_6147.jpg'],
     },
   ],
   [
@@ -425,6 +462,7 @@ function ArchiveDetail({ item, onClose }) {
         ) : (
           <AnimImg key={m} src={archiveSrc(m)} alt={i === 0 ? item.title : ''} className="ad-img" />
         ))}
+        {item.mp4 && <video src={item.mp4} className="ad-img" controls playsInline preload="metadata" />}
         {item.video && (
           <div className="ad-video">
             <iframe
@@ -508,6 +546,26 @@ const ART_HEART = {
   palette: { r: '#E0455B' },
   rows: ['.rr...rr.', 'rrrr.rrrr', 'rrrrrrrrr', 'rrrrrrrrr', '.rrrrrrr.', '..rrrrr..', '...rrr...', '....r....'],
 };
+// Recommendations from Skillshare colleagues, quoted as written (Melissa's is cut at the last complete sentence).
+const KIND_WORDS = [
+  {
+    name: 'Sharon Byun',
+    role: 'Lead Product Designer, Skillshare',
+    text: [
+      "I had the pleasure of mentoring Jayden during her internship at Skillshare, and I can confidently say she’s an exceptional designer. Jayden quickly grasped the goal and context of our projects, bringing a strong understanding of design principles such as accessibility, and a real passion for creating user-centered solutions asking bold questions.",
+      "What stood out most was her ability to blend creativity with practicality—producing polished, functional designs while always keeping user needs top of mind, juggling stakeholder’s requirements and feedback. She was proactive in seeking feedback, iterative in their process, and consistently demonstrated a collaborative and positive attitude.",
+      "I have no doubt that Jayden has a bright future ahead in product design, and I highly recommend her for any design role.",
+    ],
+  },
+  {
+    name: 'Melissa Lyons',
+    role: 'Manager at Skillshare',
+    text: [
+      "Jayden was an incredible Product Design Intern at Skillshare in the fall of 2024. She took on foundational projects, feature improvements, and growth marketing iterations within just three months and impressed us with her ability to move initiatives forward efficiently while incorporating feedback from multiple directions. Within her first month, she was independently tackling projects, conducting competitive analyses, user research, and deep dives into current functionality, uncovering insights that might have otherwise been missed. Despite her short time with us, she made a significant impact on our team.",
+    ],
+  },
+];
+
 // About story: three short paragraphs; the pixel illustrations sit mid-sentence like inline icons.
 const ABOUT_STORY = [
   ["As a kid, I stayed up past bedtime making tiny ", ART_CUPCAKE, " food, chasing every detail. That love of craft followed me into design. In college I studied visual branding and loved the storytelling, but it felt one-sided."],
@@ -546,6 +604,8 @@ function Loader({ onDone }) {
     const size = 22; // px per pixel cell — fine enough for the flower silhouette to read
     const cols = Math.ceil(window.innerWidth / size);
     const rows = Math.ceil(window.innerHeight / size);
+    // failsafe: if the window has no size yet (hidden pane) or the image fails, never trap the visitor behind the curtain
+    if (!cols || !rows) { const t0 = setTimeout(() => onDoneRef.current(), 0); return () => clearTimeout(t0); }
     let cancelled = false;
     let timer = null;
 
@@ -607,6 +667,7 @@ function Loader({ onDone }) {
       setGrid({ cols, rows, colors, delays });
       timer = setTimeout(() => onDoneRef.current(), hold + maxDelay + duration + 200);
     };
+    img.onerror = () => { if (!cancelled) onDoneRef.current(); };
     img.src = LOADER_IMG;
 
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
@@ -700,15 +761,17 @@ function PixelTrail() {
 }
 
 // ── Hash routing: every page and archive modal has a URL, so the back button works and pieces can be
-// linked directly (#/work/adobe, #/archive/colorful, #/archive/glyqlo, #/about). ──
-const WORK_SLUGS = ['adobe', 'class-discovery', 'onboarding', 'ai-aac-device'];
-const ARCHIVE_PAGES = { gmaps: 'google-maps', zuora: 'zuora', colorful: 'colorful', kidomi: 'ki-domi', usability: 'nordstrom-ai-gift-finder' };
+// linked directly (#/work/adobe, #/experimentation/colorful, #/experimentation/glyqlo, #/about). `#/archive/...` still works. ──
+const WORK_SLUGS = ['adobe-tooling', 'adobe-vision', 'class-discovery', 'onboarding'];
+const ARCHIVE_PAGES = { gmaps: 'google-maps', zuora: 'zuora', colorful: 'colorful', kidomi: 'ki-domi', usability: 'nordstrom-ai-gift-finder', aac: 'ai-aac-device' };
 const ARCHIVE_PAGE_KEYS = Object.keys(ARCHIVE_PAGES);
 
 function parseHash(hash) {
   const [a, b] = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  if (a === 'work' && b === 'ai-aac-device') return { page: 'aac', caseIdx: 0, modal: null }; // moved to Experimentation
+  if (a === 'work' && b === 'adobe') return { page: 'case', caseIdx: 0, modal: null }; // old single Adobe page
   if (a === 'work' && WORK_SLUGS.includes(b)) return { page: 'case', caseIdx: WORK_SLUGS.indexOf(b), modal: null };
-  if (a === 'archive') {
+  if (a === 'experimentation' || a === 'archive') {
     const key = ARCHIVE_PAGE_KEYS.find((k) => ARCHIVE_PAGES[k] === b);
     if (key) return { page: key, caseIdx: 0, modal: null };
     return { page: 'archive', caseIdx: 0, modal: b || null };
@@ -764,9 +827,9 @@ export default function Portfolio() {
     }
   };
 
-  const goArchive = (e) => { e.preventDefault(); nav('#/archive'); if (page === 'archive') window.scrollTo(0, 0); };
+  const goArchive = (e) => { e.preventDefault(); nav('#/experimentation'); if (page === 'archive') window.scrollTo(0, 0); };
   const goAbout = (e) => { e.preventDefault(); nav('#/about'); };
-  const goArchiveCase = (key) => nav(key === 'archive' ? '#/archive' : '#/archive/' + ARCHIVE_PAGES[key]);
+  const goArchiveCase = (key) => nav(key === 'archive' ? '#/experimentation' : '#/experimentation/' + ARCHIVE_PAGES[key]);
   const goCase = (idx) => nav('#/work/' + WORK_SLUGS[idx]);
 
   return (
@@ -821,7 +884,15 @@ export default function Portfolio() {
           .page{max-width:1560px;grid-template-columns:360px 1fr;gap:96px}
           .intro-text{font-size:17px;max-width:340px}
         }
-        .brand{font-weight:700;color:#000}
+        .brand{font-weight:700;color:#000;transition:color .35s ease}
+        .brand.is-hot .pixel-bullet{transform:scale(1.3);margin-right:6px}
+        .card-cursor{position:fixed;left:0;top:0;z-index:6000;pointer-events:none}
+        .card-cursor>div{display:flex;align-items:center;gap:8px;background:#111;color:#fff;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;white-space:nowrap;opacity:0;transform:scale(.85);transform-origin:top left;transition:opacity .15s ease, transform .15s ease}
+        .card-cursor>div i{width:6px;height:6px;background:var(--c,#fff)}
+        .card-cursor.on>div{opacity:1;transform:none}
+        .card-media>*{transition:transform .7s cubic-bezier(.2,.7,.2,1)}
+        .card:hover .card-media>*{transform:scale(1.025)}
+        @media (prefers-reduced-motion:reduce){.card:hover .card-media>*{transform:none}}
         .brand .pixel-bullet{margin-right:4px;vertical-align:middle}
 
         .rail-rule{height:1px;background:var(--border)}
@@ -850,6 +921,11 @@ export default function Portfolio() {
         .card-media{position:relative;width:100%;aspect-ratio:16/10;overflow:hidden;border-bottom:1px solid rgba(26,26,24,.07)}
         .card-img-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
         .card-img{width:100%;height:100%;display:block}
+        .af{background:#E5E1D9}
+        .af-anim{position:relative;width:70%;aspect-ratio:16/10}
+        .card-tags{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;font-size:12.5px;line-height:1.4;color:var(--text-mid);margin-bottom:6px}
+        .card-tags span{display:inline-flex;align-items:center;gap:10px}
+        .card-tags i{width:5px;height:5px;background:#bdb8b0;flex:none}
         .card-badge{position:absolute;top:16px;left:16px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;background:rgba(245,242,238,.95);color:#1A1A18;padding:5px 10px;border-radius:20px}
 
         .card-body{padding:20px 2px 0;max-width:560px}
@@ -942,6 +1018,10 @@ export default function Portfolio() {
         .ad-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
         @media (max-width:860px){.ad-dialog{padding:24px 20px 28px}}
         .about-sec{display:grid;grid-template-columns:200px minmax(0,1fr);gap:64px;border-top:1px solid #1A1A18;padding-top:24px}
+        .kind-list{display:flex;flex-direction:column;gap:40px}
+        .kind blockquote{display:flex;flex-direction:column;gap:12px;font-size:16px;line-height:1.7;color:var(--text)}
+        .kind figcaption{margin-top:14px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.04em;color:var(--text-dim);display:flex;gap:10px;flex-wrap:wrap}
+        .kind figcaption strong{color:var(--text);font-weight:500}
         .about-block{display:flex;flex-direction:column;gap:24px;border-top:1px solid #1A1A18;padding-top:24px}
         .about-label{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);align-self:start;padding-top:3px}
         .about-label i,.about-dot{display:inline-block;width:6px;height:6px;flex-shrink:0}
@@ -991,6 +1071,7 @@ export default function Portfolio() {
       `}</style>
 
       {loading && <Loader onDone={finishLoading} />}
+      <CardCursor />
 
       <PixelTrail />
 
@@ -1000,15 +1081,15 @@ export default function Portfolio() {
 
       {page === 'home' && (
         <div className="page">
-          <SideRail />
+          <SideRail hot={CARDS[activeIdx] && CARDS[activeIdx].company} />
           <WorkStack activeIdx={activeIdx} onActiveChange={setActiveIdx} onOpenCase={goCase} />
         </div>
       )}
 
-      {page === 'case' && caseIdx === 1 && <ScrollReveal><ClassDiscovery onNext={() => goCase(2)} /></ScrollReveal>}
-      {page === 'case' && caseIdx === 2 && <ScrollReveal><Onboarding onNext={() => goCase(3)} /></ScrollReveal>}
-      {page === 'case' && caseIdx === 3 && <ScrollReveal><AACDevice onNext={() => goCase(0)} /></ScrollReveal>}
-      {page === 'case' && caseIdx === 0 && <ScrollReveal><Adobe onNext={() => goCase(1)} /></ScrollReveal>}
+      {page === 'case' && caseIdx === 0 && <ScrollReveal><AdobeTooling onNext={() => goCase(1)} /></ScrollReveal>}
+      {page === 'case' && caseIdx === 1 && <ScrollReveal><AdobeVision onNext={() => goCase(2)} /></ScrollReveal>}
+      {page === 'case' && caseIdx === 2 && <ScrollReveal><ClassDiscovery onNext={() => goCase(3)} /></ScrollReveal>}
+      {page === 'case' && caseIdx === 3 && <ScrollReveal><Onboarding onNext={() => goCase(0)} /></ScrollReveal>}
       {page === 'gmaps' && <ScrollReveal><GoogleMaps onNext={() => goArchiveCase('archive')} /></ScrollReveal>}
       {page === 'zuora' && <ScrollReveal><Zuora onNext={() => goArchiveCase('archive')} /></ScrollReveal>}
       {page === 'colorful' && <ScrollReveal><Colorful onNext={() => goArchiveCase('archive')} /></ScrollReveal>}
@@ -1018,7 +1099,7 @@ export default function Portfolio() {
       {page === 'archive' && (
       /* ── Archive: explorations gallery ── */
       <section id="archive" className="archive archive-page">
-        <ArchiveGrid modalSlug={modalSlug} onOpenModal={(slug) => nav('#/archive/' + slug)} onCloseModal={() => nav('#/archive')} onOpenPage={goArchiveCase} />
+        <ArchiveGrid modalSlug={modalSlug} onOpenModal={(slug) => nav('#/experimentation/' + slug)} onCloseModal={() => nav('#/experimentation')} onOpenPage={goArchiveCase} />
 
       </section>
       )}
@@ -1074,6 +1155,18 @@ export default function Portfolio() {
               </div>
               <span className="about-item-date">{row.date}</span>
             </div>
+          ))}
+        </div>
+        </div>
+
+        <div className="about-sec">
+        <span className="about-label"><i />Kind words</span>
+        <div className="kind-list">
+          {KIND_WORDS.map((q) => (
+            <figure className="kind" key={q.name}>
+              <blockquote>{q.text.map((para, i) => <p key={i}>{para}</p>)}</blockquote>
+              <figcaption><strong>{q.name}</strong>{q.role}</figcaption>
+            </figure>
           ))}
         </div>
         </div>

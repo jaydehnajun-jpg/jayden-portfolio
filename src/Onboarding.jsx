@@ -23,7 +23,7 @@ export default function Onboarding({ onNext }) {
     <CaseLayout
       accent="#00A86B"
       tags={['Skillshare', 'Product Design', 'Experimentation']}
-      title="Onboarding & Member Home"
+      title="Helping New Members Take Their First Step Faster."
       subtitle="Helping new members actually start learning by cutting the steps between signing up and their first real action."
       hero={
         <Frame max={420}>
@@ -37,7 +37,7 @@ export default function Onboarding({ onNext }) {
         ['3 Activation Steps', 'Save a class, follow a teacher, watch a lesson'],
       ] }}
       sections={SECTIONS}
-      next={{ title: 'AI AAC Device', onNext }}
+      next={{ title: "Connecting Adobe's AI Agents to the Tools You Already Use.", onNext }}
     >
       <Section id="problem" title="Too many steps, too many drop-offs.">
         <P>

@@ -22,7 +22,7 @@ export default function GoogleMaps({ onNext }) {
       hero={<Frame src={HERO} alt="Multi-stop route options on Google Maps" max={420} />}
       meta={[['Timeline', 'March – April 2024'], ['Scope', 'UX Research · UI Exploration'], ['Team', 'Solo Project']]}
       sections={SECTIONS}
-      next={{ eyebrow: 'Back to', title: 'Archive', cta: 'Back to archive', onNext }}
+      next={{ eyebrow: 'Back to', title: 'Experimentation', cta: 'Back to experimentation', onNext }}
     >
       <Section id="problem" title="Multi-stop trips take too much thinking.">
         <Callout>
