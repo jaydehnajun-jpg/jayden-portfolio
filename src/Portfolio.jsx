@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import { flushSync } from "react-dom";
 import ClassDiscovery from "./ClassDiscovery.jsx";
 import Onboarding from "./Onboarding.jsx";
 import AACDevice from "./AACDevice.jsx";
@@ -145,8 +146,8 @@ function PageNav({ page, goHome, goArchive, goAbout }) {
   return (
     <nav className="rail-nav" aria-label="Primary">
       <a href="#work-0" className={`rail-nav-link pixel-underline${page === 'home' || page === 'case' ? ' is-current' : ''}`} onClick={goHome('work-0')}>Work</a>
-      <a href="#experimentation" className={`rail-nav-link pixel-underline${page === 'archive' || ARCHIVE_PAGE_KEYS.includes(page) ? ' is-current' : ''}`} onClick={goArchive}>Experimentation</a>
-      <a href="#about" className={`rail-nav-link pixel-underline${page === 'about' ? ' is-current' : ''}`} onClick={goAbout}>About</a>
+      <a href="#experimentation" className={`rail-nav-link pixel-underline${page === 'archive' || ARCHIVE_PAGE_KEYS.includes(page) ? ' is-current' : ''}`} onClick={goArchive}>Tinkering<span className="sparkles" aria-hidden="true"><i /><i /><i /><i /><i /></span></a>
+      <a href="#about" className={`rail-nav-link pixel-underline${page === 'about' ? ' is-current' : ''}`} onClick={goAbout}>About<span className="fx-smile" aria-hidden="true" /></a>
     </nav>
   );
 }
@@ -938,10 +939,17 @@ export default function Portfolio() {
     const apply = () => {
       const r = parseHash(window.location.hash);
       const key = r.page + ':' + r.caseIdx;
-      setPage(r.page);
-      setCaseIdx(r.caseIdx);
-      setModalSlug(r.modal);
-      if (key !== routeRef.current) { routeRef.current = key; window.scrollTo(0, 0); }
+      const changed = key !== routeRef.current;
+      const swap = () => {
+        flushSync(() => { setPage(r.page); setCaseIdx(r.caseIdx); setModalSlug(r.modal); });
+        if (changed) window.scrollTo({ top: 0, behavior: 'instant' });   // instant: html has scroll-behavior:smooth
+      };
+      routeRef.current = key;
+      // Moving between pages cross-fades through the View Transitions API (a ~0.2s fade, see the ::view-transition
+      // rules in the CSS) so the content swap and scroll reset don't read as a jump. Browsers without it, and
+      // visitors who prefer reduced motion, get the plain swap. Opening/closing a modal on the same page is not a route change.
+      if (changed && document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(swap);
+      else swap();
     };
     window.addEventListener('hashchange', apply);
     return () => window.removeEventListener('hashchange', apply);
@@ -987,6 +995,13 @@ export default function Portfolio() {
         }
         html{scroll-behavior:smooth;scroll-snap-type:y mandatory}
         body{background:var(--bg);color:var(--text);font-family:'Open Sauce Sans',sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+        /* headings use Thermal (Adobe Fonts kit linked in index.html); everything else stays Open Sauce Sans */
+        /* page-to-page cross-fade (View Transitions API); the fixed nav and sound toggle keep their own layers so they stay put */
+        ::view-transition-group(root){animation-duration:.22s}
+        ::view-transition-old(root),::view-transition-new(root){animation-timing-function:ease}
+        .floating-nav{view-transition-name:site-nav}
+        .sound-toggle{view-transition-name:sound-toggle}
+        h1,h2,h3{font-family:'thermal-variable','Open Sauce Sans',sans-serif;font-weight:400}
 
         /* Canvas for PixelTrail — nothing shows until the cursor has actually moved over it */
         .pixel-trail-canvas{position:fixed;inset:0;z-index:-1;pointer-events:none;width:100vw;height:100vh}
@@ -999,6 +1014,30 @@ export default function Portfolio() {
         .rail-nav{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
         .rail-nav-link{font-size:12px;color:var(--text-dim);text-decoration:none;transition:color .15s}
         .rail-nav-link:hover{color:var(--text)}
+        /* "Tinkering" throws a few pixel sparkles on hover: little plus-shaped stars made of 2px squares */
+        .rail-nav-link{position:relative}
+        .sparkles{position:absolute;inset:0;pointer-events:none}
+        .sparkles i{position:absolute;width:2px;height:2px;background:var(--c);box-shadow:2px 0 0 var(--c),-2px 0 0 var(--c),0 2px 0 var(--c),0 -2px 0 var(--c);opacity:0;transform:scale(0)}
+        .sparkles i:nth-child(1){left:-8px;top:-6px;--c:#E9A23B}
+        .sparkles i:nth-child(2){left:30%;top:-12px;--c:#F7B2C4}
+        .sparkles i:nth-child(3){left:62%;top:-8px;--c:#E9A23B}
+        .sparkles i:nth-child(4){right:-10px;top:2px;--c:#B9A6F0}
+        .sparkles i:nth-child(5){left:46%;bottom:-12px;--c:#F7B2C4}
+        @media (prefers-reduced-motion:no-preference){
+          .rail-nav-link:hover .sparkles i{animation:sparkle .9s steps(6,end) infinite}
+          .sparkles i:nth-child(2){animation-delay:.15s!important}
+          .sparkles i:nth-child(3){animation-delay:.3s!important}
+          .sparkles i:nth-child(4){animation-delay:.45s!important}
+          .sparkles i:nth-child(5){animation-delay:.6s!important}
+        }
+        /* About: a sideways :) pops in above the word, the same smile as the footer */
+        .fx-smile{position:absolute;left:100%;top:-11px;margin-left:-2px;pointer-events:none;font-family:'DM Mono',monospace;font-size:11px;line-height:1;color:var(--text);opacity:0;transform:rotate(90deg) scale(0)}
+        .fx-smile::before{content:':)'}
+        @media (prefers-reduced-motion:no-preference){
+          .rail-nav-link:hover .fx-smile{animation:smilePop .5s steps(5,end) forwards}
+        }
+        @keyframes smilePop{0%{opacity:0;transform:rotate(90deg) scale(0)}60%{opacity:1;transform:rotate(90deg) scale(1.4)}100%{opacity:1;transform:rotate(90deg) scale(1)}}
+        @keyframes sparkle{0%{opacity:0;transform:scale(0)}25%{opacity:1;transform:scale(1.4)}60%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(0) translateY(-4px)}}
         .rail-nav-link.is-current{color:var(--text);font-weight:600}
         .floating-nav{position:fixed;top:32px;left:60px;z-index:100}
         .peek{position:fixed;left:0;top:0;z-index:90;pointer-events:none;will-change:transform}
@@ -1090,7 +1129,7 @@ export default function Portfolio() {
            this card is the one nearest viewport-center */
         .pixel-bullet{display:inline-block;width:6px;height:6px;flex-shrink:0;opacity:.4;transition:opacity .2s}
         .pixel-bullet.is-active{opacity:1}
-        .card-title{font-size:clamp(15px,2.7cqw,24px);font-weight:700;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
+        .card-title{font-size:clamp(15px,2.7cqw,24px);font-weight:400;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
         .card-desc{max-width:560px;font-size:12.5px;line-height:1.6;color:var(--text-mid);margin-bottom:14px}
         .card-metrics{display:flex;gap:20px;padding-top:12px;border-top:1px solid rgba(26,26,24,.08)}
         .metric{display:flex;flex-direction:column;gap:2px}
@@ -1100,7 +1139,7 @@ export default function Portfolio() {
         /* ── Case study template: hero, then the home page's own .page grid reused for a
            TOC rail + placeholder content sections — same coordinate system, no new layout. ── */
         .case-hero{max-width:1280px;margin:0 auto;padding:calc(var(--top) + 24px) 60px 40px}
-        .case-title{font-size:clamp(28px,3.4vw,44px);font-weight:700;line-height:1.1;letter-spacing:-.02em;margin:14px 0 12px;max-width:760px}
+        .case-title{font-size:clamp(28px,3.4vw,44px);font-weight:400;line-height:1.1;letter-spacing:-.02em;margin:14px 0 12px;max-width:760px}
         .case-desc{font-size:15px;line-height:1.6;color:var(--text-mid);max-width:640px;margin-bottom:20px}
         .case-hero .card-metrics{margin-bottom:28px}
         .case-hero-media{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;background:var(--border)}
@@ -1108,7 +1147,7 @@ export default function Portfolio() {
         .case-toc{display:flex;flex-direction:column;gap:12px;margin-top:14px}
         .case-sections{display:flex;flex-direction:column;gap:56px;padding-bottom:60px}
         .case-section{display:flex;flex-direction:column;gap:12px}
-        .case-section-title{font-size:20px;font-weight:700;letter-spacing:-.01em;scroll-margin-top:var(--top)}
+        .case-section-title{font-size:20px;font-weight:400;letter-spacing:-.01em;scroll-margin-top:var(--top)}
         .case-placeholder{width:100%;height:180px}
         .case-placeholder.short{height:90px}
 
@@ -1123,7 +1162,7 @@ export default function Portfolio() {
           width:100%;
           min-height:100vh;
           box-sizing:border-box;
-          padding:calc(var(--top) + 24px) var(--gap) var(--gap);
+          padding:var(--top) var(--gap) var(--gap);
         }
         .bento{display:flex;align-items:flex-start;gap:var(--gap)}
                 .bento-col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:var(--gap)}
@@ -1142,14 +1181,14 @@ export default function Portfolio() {
         .bento-title{font-size:14px;font-weight:600;letter-spacing:-.01em}
 
         /* ── About: clean and calm, same width as the Work page ── */
-        .about-page{max-width:1160px;margin:0 auto;padding:calc(var(--top) + 64px) 60px 96px;display:flex;flex-direction:column;gap:64px}
+        .about-page{max-width:1160px;margin:0 auto;padding:var(--top) 60px 96px;display:flex;flex-direction:column;gap:64px}
         .wf-block{background:rgba(26,26,24,.06);border:1px solid var(--border)}
         .wf-divider{height:1px;background:var(--border)}
 
         .about-hero{display:flex;gap:40px;align-items:stretch}
         .about-photo{width:320px;height:auto;align-self:stretch;object-fit:cover;object-position:center 38%;flex-shrink:0;display:block}
         .about-hero-text{flex:1;padding-top:4px;display:flex;flex-direction:column;gap:10px}
-        .about-name{font-size:44px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+        .about-name{font-size:32px;font-weight:400;letter-spacing:-.02em;line-height:1.1}
         .about-tagline{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
         .about-bio{font-size:16px;line-height:1.75;color:var(--text-mid);max-width:620px}
         .px-inline{display:inline-block;height:1.75em;vertical-align:top;margin:0 .1em}
@@ -1163,7 +1202,7 @@ export default function Portfolio() {
         .ad-close{background:none;border:none;padding:0;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text)}
         .ad-tag{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
         .ad-tag i{width:6px;height:6px;background:#1A1A18}
-        .ad-title{font-size:clamp(24px,3vw,32px);font-weight:600;letter-spacing:-.025em;line-height:1.15;margin-top:4px}
+        .ad-title{font-size:clamp(24px,3vw,32px);font-weight:400;letter-spacing:-.025em;line-height:1.15;margin-top:4px}
         .ad-meta{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.02em;color:var(--text-dim)}
         .ad-desc{font-size:16px;line-height:1.7;color:var(--text-mid);max-width:600px}
         .ad-links{display:flex;gap:24px;flex-wrap:wrap;font-size:14px;font-weight:600}
@@ -1180,7 +1219,7 @@ export default function Portfolio() {
         .kind-sec{max-width:1280px;padding:96px 60px 104px;display:grid;grid-template-columns:260px 1fr;gap:48px;align-items:start}
         .kind-head{display:flex;flex-direction:column;gap:8px}
         .kind-sub{font-size:13px;line-height:1.5;color:var(--text-mid)}
-        .kind-title{font-size:20px;font-weight:600;letter-spacing:-.015em;line-height:1.2;color:var(--text)}
+        .kind-title{font-size:20px;font-weight:400;letter-spacing:-.015em;line-height:1.2;color:var(--text)}
         .kind-sec .kind-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
         /* the cards share the work cards' tilt and sit on the section like paper on a desk */
         .kind-sec .kind{perspective:900px}
@@ -1216,7 +1255,7 @@ export default function Portfolio() {
         .about-item-date{font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);white-space:nowrap;flex-shrink:0}
 
         @media (max-width:860px){
-          .about-page{padding:calc(var(--top) + 32px) 24px 60px}
+          .about-page{padding:72px 24px 60px}
           .floating-nav{top:24px;left:24px}
           .about-hero{flex-direction:column}
           .about-photo{width:220px;height:auto;aspect-ratio:4/5;align-self:flex-start}
@@ -1227,7 +1266,7 @@ export default function Portfolio() {
         }
 
         @media (max-width:860px){
-          .archive-page{--gap:6px}
+          .archive-page{--gap:6px;padding-top:72px}
         }
 
         .site-footer{border-top:1px solid var(--border);padding:56px 60px 32px;display:flex;flex-direction:column;gap:16px}

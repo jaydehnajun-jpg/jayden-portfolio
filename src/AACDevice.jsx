@@ -66,7 +66,7 @@ export default function AACDevice({ onNext }) {
         ['Prototype & Testing', 'Built the schedule-first prototype and the usability testing script.'],
       ] }}
       sections={SECTIONS}
-      next={{ eyebrow: 'Back to', title: 'Experimentation', cta: 'Back to experimentation', onNext }}
+      next={{ eyebrow: 'Back to', title: 'Tinkering', cta: 'Back to tinkering', onNext }}
     >
       <Section id="context" title="AAC tools are static, hard to personalize, and often abandoned.">
         <Split>

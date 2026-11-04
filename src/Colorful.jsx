@@ -116,7 +116,7 @@ export default function Colorful({ onNext }) {
         ['48 Hours', 'From prompt to pitch'],
       ] }}
       sections={SECTIONS}
-      next={{ eyebrow: 'Back to', title: 'Experimentation', cta: 'Back to experimentation', onNext }}
+      next={{ eyebrow: 'Back to', title: 'Tinkering', cta: 'Back to tinkering', onNext }}
     >
       <Section id="overview" title="An accessible way for kids to make and share art.">
         <Callout>Design your own digital application that fosters community and celebrates inclusivity.</Callout>

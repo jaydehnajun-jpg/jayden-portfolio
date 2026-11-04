@@ -26,7 +26,7 @@ export default function UsabilityStudy({ onNext }) {
         ['Team', '4 researchers'],
       ]}
       sections={SECTIONS}
-      next={{ eyebrow: 'Back to', title: 'Experimentation', cta: 'Back to experimentation', onNext }}
+      next={{ eyebrow: 'Back to', title: 'Tinkering', cta: 'Back to tinkering', onNext }}
     >
       <Section id="overview" title="Testing an AI gift finder with real shoppers.">
         <P>

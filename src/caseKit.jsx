@@ -13,9 +13,9 @@ export const MID = 'rgba(26,26,24,.62)';
 export const DIM = 'rgba(26,26,24,.4)';
 
 export const TYPE = {
-  display: { fontSize: 'clamp(32px,4.5vw,52px)', fontWeight: 600, lineHeight: 1.08, letterSpacing: '-.035em' },
-  h2:      { fontSize: 'clamp(24px,2.8vw,32px)', fontWeight: 600, lineHeight: 1.2, letterSpacing: '-.025em' },
-  h3:      { fontSize: '20px', fontWeight: 600, lineHeight: 1.3, letterSpacing: '-.01em' },
+  display: { fontSize: 'clamp(32px,4.5vw,52px)', fontWeight: 400, lineHeight: 1.08, letterSpacing: '-.035em' },
+  h2:      { fontSize: 'clamp(24px,2.8vw,32px)', fontWeight: 400, lineHeight: 1.2, letterSpacing: '-.025em' },
+  h3:      { fontSize: '20px', fontWeight: 400, lineHeight: 1.3, letterSpacing: '-.01em' },
   stat:    { fontSize: 'clamp(28px,3.4vw,40px)', fontWeight: 300, lineHeight: 1, letterSpacing: '-.03em' },
   body:    { fontSize: '17px', lineHeight: 1.8 },
   small:   { fontSize: '13px', lineHeight: 1.65 },
