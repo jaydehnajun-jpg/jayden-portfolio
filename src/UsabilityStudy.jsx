@@ -1,7 +1,7 @@
 // Archive page for a client usability study (Nordstrom AI Gift Finder). Covers how the study was run,
 // with the client named and two public screenshots. Findings and numbers are deliberately left out:
 // the NDA still covers confidential information.
-import { CaseLayout, Section, P, Cards, Rows, Frame } from './caseKit.jsx';
+import { CaseLayout, Section, P, Cards, Rows, Frame, Hero } from './caseKit.jsx';
 
 const U = '/assets/Usability/';
 
@@ -19,7 +19,7 @@ export default function UsabilityStudy({ onNext }) {
       tags={['Nordstrom', 'UX Research', 'Usability Testing']}
       title="AI Gift Finder Usability Study"
       subtitle="A moderated usability study of Nordstrom's conversational AI gift-shopping feature."
-      hero={<Frame src={U + 'gift-landing.png'} alt="Nordstrom's AI Gift Finder landing screen" max={420} />}
+      hero={<Hero src={U + 'gift-landing.png'} alt="Nordstrom's AI Gift Finder landing screen" tint="#E9E6DF" blend />}
       meta={[
         ['Timeline', 'Winter 2026'],
         ['Context', 'Client project for Nordstrom, through a UW usability testing course'],

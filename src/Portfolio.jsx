@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import ClassDiscovery from "./ClassDiscovery.jsx";
 import Onboarding from "./Onboarding.jsx";
 import AACDevice from "./AACDevice.jsx";
@@ -12,6 +12,11 @@ import UsabilityStudy from "./UsabilityStudy.jsx";
 import AdobeAnim from "./AdobeAnim.jsx";
 import AdobeVisionAnim from "./AdobeVisionAnim.jsx";
 import { AnimImg } from "./caseKit.jsx";
+import { MapsAnim, AACAnim, ZuoraAnim, NordAnim } from "./ExpAnims.jsx";
+import { play, isOn, setOn, subscribe } from "./sound.js";
+
+// Dev-only sandbox for 3D ideas (#/lab). Tree-shaken out of production builds.
+const Lab3D = import.meta.env.DEV ? lazy(() => import("./Lab3D.jsx")) : null;
 
 // Fades and lifts each case-study section's blocks into view as they scroll on screen.
 function ScrollReveal({ children }) {
@@ -46,6 +51,8 @@ const BRAND_COLORS = { Adobe: '#E3000F', Skillshare: '#00A86B', USC: '#990000', 
 const BRAND_NAMES = Object.keys(BRAND_COLORS);
 const HIGHLIGHT_COLORS = { [NAME]: NAME_COLOR, ...BRAND_COLORS };
 const HIGHLIGHTS = Object.keys(HIGHLIGHT_COLORS);
+// Hovering a company or school in the intro pops up a small photo from that chapter (files in public/assets/Intro/).
+const PEEKS = { Adobe: 'adobe', Skillshare: 'skillshare', UW: 'uw', USC: 'usc' };
 
 function Bio({ text, hot }) {
   const pattern = new RegExp(`(${HIGHLIGHTS.join('|')})`, 'g');
@@ -53,7 +60,7 @@ function Bio({ text, hot }) {
     <p className="intro-text">
       {text.split(pattern).map((chunk, i) =>
         HIGHLIGHTS.includes(chunk) ? (
-          <span key={i} className={`brand${chunk === hot ? ' is-hot' : ''}`} style={chunk === hot ? { color: HIGHLIGHT_COLORS[chunk] } : undefined}>
+          <span key={i} data-peek={PEEKS[chunk]} className={`brand${chunk === hot ? ' is-hot' : ''}`} style={chunk === hot ? { color: HIGHLIGHT_COLORS[chunk] } : undefined}>
             <span className="pixel-bullet is-active" style={{ background: HIGHLIGHT_COLORS[chunk] }} />
             {chunk}
           </span>
@@ -107,13 +114,13 @@ const MediaVideo = ({ src, fit, bg }) => (
 const CARDS = [
   {
     company: 'Adobe', color: '#E3000F',
-    title: "Connecting Adobe's AI Agents to the Tools You Already Use.",
+    title: "Bringing Adobe's AI Agents to the Apps You Already Use.",
     tags: ['Adobe Internship', 'Under NDA'],
     media: <AnimFrame><AdobeAnim /></AnimFrame>,
   },
   {
     company: 'Adobe', color: '#E3000F',
-    title: "Shaping a Future Vision for Adobe's AI Agents.",
+    title: "Finding Where Adobe's AI Agent Could Stand Apart.",
     tags: ['Adobe Internship', 'Future Vision', 'Pitched'],
     media: <AnimFrame><AdobeVisionAnim /></AnimFrame>,
   },
@@ -381,21 +388,16 @@ const ARCHIVE_ROWS = [
       assets: ['/assets/TypeExplorations/minutes.jpg', '/assets/TypeExplorations/ouch.png', '/assets/TypeExplorations/screen.jpg', ['/assets/TypeExplorations/space1.png', '/assets/TypeExplorations/space2.png'], ['/assets/TypeExplorations/space3.png', '/assets/TypeExplorations/space4.png']],
     },
   ],
-  [
-    {
-      src: 'banilathumb.jpeg', a: 1, title: 'Banila Co', tag: 'Branded Content', slug: 'banila-co',
-      meta: 'June 2021 · Internship at Miping Plan, an advertising agency · 2 marketers, 1 designer',
-      desc: 'Banila Co is a popular Korean cosmetics brand. During my internship, I created assets and branded content for their Instagram promotion.',
-      assets: [
-        '/assets/Archive/banila/661fe36f3c570e7b602920e9_banila mock.png',
-        ['/assets/Archive/banila/634f6e234ba9485bfbb39246_FB253-p-800.png', '/assets/Archive/banila/634f6e2345e80b22d648da45_FB248-p-800.png'],
-        ['/assets/Archive/banila/6625807568d8c074d183d28d_FB332-p-800.png', '/assets/Archive/banila/662580758fa37fd8f5c3143e_FB375-p-800.png'],
-        ['/assets/Archive/banila/66258075d22d28967a048678_FB425-p-800.png', '/assets/Archive/banila/634f6e23ac1ff22262f52579_FB249 copy-p-800.png'],
-        ['/assets/Archive/banila/66258075dbfdb6e991785b5f_FB349-p-800.png', '/assets/Archive/banila/634f6e234c5871feee154ae6_FB377-p-800.png'],
-      ],
-    },
-  ],
 ];
+
+// Grid order and thumbnails: the physical and spatial pieces lead, then the rest. Four projects get a drawn
+// animation (ExpAnims.jsx) instead of a screenshot, and Colorful plays the part of the prototype after onboarding.
+const ARCHIVE_ORDER = ['Google Maps Route Optimization', 'Car Color Selection', 'Card Selection', 'Folder Navigation', 'Laser-Cut Modular Shelf', 'Colorful', 'Laser-Cut Dot Slider', 'AI AAC Device', 'Tone Shifter', 'Zuora Design System', 'Ki.domi', 'Nordstrom AI Gift Finder Study', 'Glyqlo', 'Pink Imagination', 'Type Explorations'];
+const ARCHIVE_ANIMS = { 'Google Maps Route Optimization': MapsAnim, 'AI AAC Device': AACAnim, 'Zuora Design System': ZuoraAnim, 'Nordstrom AI Gift Finder Study': NordAnim };
+const ARCHIVE_ITEMS = ARCHIVE_ROWS.flat()
+  .map((it) => (ARCHIVE_ANIMS[it.title] ? { ...it, anim: ARCHIVE_ANIMS[it.title], a: 1.6 }
+    : it.title === 'Colorful' ? { ...it, src: 'colorful-play.gif', a: 856 / 658, matte: undefined } : it))
+  .sort((x, y) => ARCHIVE_ORDER.indexOf(x.title) - ARCHIVE_ORDER.indexOf(y.title));
 
 const hasDetail = (item) => !!(item.page || item.slug || item.desc || (item.links && item.links.length) || (item.assets && item.assets.length));
 
@@ -412,6 +414,8 @@ function BentoTile({ item, onOpen }) {
     >
       {item.nda ? (
         <div className="bento-nda"><span>Under NDA</span></div>
+      ) : item.anim ? (
+        <div className="bento-anim"><item.anim /></div>
       ) : (
       <AnimImg
         src={item.src.startsWith('/') ? item.src : `/assets/Archive/${item.src}`} alt={item.title}
@@ -492,7 +496,7 @@ function ArchiveGrid({ modalSlug, onOpenModal, onCloseModal, onOpenPage }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const items = ARCHIVE_ROWS.flat();
+  const items = ARCHIVE_ITEMS;
   const columns = Array.from({ length: cols }, () => []);
   const heights = Array(cols).fill(0);
   items.forEach((item) => {
@@ -777,8 +781,77 @@ function parseHash(hash) {
     return { page: 'archive', caseIdx: 0, modal: b || null };
   }
   if (a === 'about') return { page: 'about', caseIdx: 0, modal: null };
+  if (a === 'lab' && import.meta.env.DEV) return { page: 'lab', caseIdx: 0, modal: null };
   return { page: 'home', caseIdx: 0, modal: null };
 }
+
+// Small photo that follows the cursor while it's over an intro word marked data-peek. It trails the pointer a
+// little and tilts with its speed. The frame loop only runs while a photo is showing.
+function PeekCard() {
+  const box = useRef(null);
+  const [key, setKey] = useState(null);   // the photo being shown (kept while it fades out)
+  const [visible, setVisible] = useState(false);
+  const [warm, setWarm] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setWarm(true), 2000); return () => clearTimeout(t); }, []); // preload the four photos once the page has settled
+  useEffect(() => {
+    const el = box.current;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const s = { x: 0, y: 0, tx: 0, ty: 0, rot: 0, show: false, raf: 0 };
+    const frame = () => {
+      const dx = s.tx - s.x, dy = s.ty - s.y;
+      s.x += dx * (reduced ? 1 : 0.2); s.y += dy * (reduced ? 1 : 0.2);
+      s.rot += ((reduced ? 0 : Math.max(-9, Math.min(9, dx * 0.35))) - s.rot) * 0.15;
+      const w = el.offsetWidth, h = el.offsetHeight;
+      // hangs right next to the pointer, so the hovered word stays visible just to its left
+      let x = s.x + 24;
+      if (x + w > window.innerWidth - 12) x = s.x - w - 24;   // flip to the left near the right edge
+      const y = Math.max(12, Math.min(window.innerHeight - h - 12, s.y - h * 0.35));
+      el.style.transform = `translate3d(${x}px,${y}px,0) rotate(${s.rot}deg)`;
+      s.raf = s.show || Math.abs(dx) + Math.abs(dy) > 0.5 ? requestAnimationFrame(frame) : 0;
+    };
+    const kick = () => { if (!s.raf) s.raf = requestAnimationFrame(frame); };
+    const onOver = (e) => {
+      if (e.pointerType && e.pointerType !== 'mouse') return;
+      const t = e.target.closest && e.target.closest('[data-peek]');
+      if (!t) return;
+      s.tx = e.clientX; s.ty = e.clientY;
+      if (!s.show) { s.x = s.tx; s.y = s.ty; s.rot = 0; }
+      s.show = true; setKey(t.dataset.peek); setVisible(true); kick();
+    };
+    const onMove = (e) => { if (!s.show) return; s.tx = e.clientX; s.ty = e.clientY; kick(); };
+    const onOut = (e) => {
+      const t = e.target.closest && e.target.closest('[data-peek]');
+      if (!t || (e.relatedTarget && t.contains(e.relatedTarget))) return;
+      s.show = false; setVisible(false);
+    };
+    document.addEventListener('pointerover', onOver);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerout', onOut);
+    return () => { cancelAnimationFrame(s.raf); document.removeEventListener('pointerover', onOver); document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerout', onOut); };
+  }, []);
+  return (
+    <div className={`peek${visible ? ' is-on' : ''}`} ref={box} aria-hidden="true">
+      <div className="peek-in">
+        {Object.values(PEEKS).map((k) => (warm || k === key) ? <img key={k} src={`/assets/Intro/${k}.jpg`} alt="" className={k === key ? 'is-cur' : ''} draggable="false" /> : null)}
+      </div>
+    </div>
+  );
+}
+
+// Corner switch for the UI sounds (see sound.js). Remembered between visits.
+function SoundToggle() {
+  const [on, setLocal] = useState(isOn());
+  useEffect(() => subscribe(setLocal), []);
+  return (
+    <button type="button" className="sound-toggle" onClick={() => setOn(!on)} aria-pressed={on} aria-label={on ? 'Turn sound off' : 'Turn sound on'}>
+      <i className={on ? 'is-on' : ''} />Sound {on ? 'on' : 'off'}
+    </button>
+  );
+}
+
+// Which elements get which sound. Delegated from the document so the individual components stay untouched.
+const HOVER_SOUND = '[data-peek], .card, .bento-tile.is-link, .rail-nav-link, .ad-close, .sound-toggle';
+const CLICK_SOUND = 'a, button, [role="button"], .card, .bento-tile.is-link';
 
 const nav = (hash) => { if (window.location.hash !== hash) window.location.hash = hash; };
 
@@ -791,6 +864,26 @@ export default function Portfolio() {
   const [caseIdx, setCaseIdx] = useState(initial.caseIdx);
   const [modalSlug, setModalSlug] = useState(initial.modal);
   const routeRef = useRef(initial.page + ':' + initial.caseIdx);
+
+  // UI sounds: a tick on hover (mouse only), a tap on click, a swish when the page changes.
+  useEffect(() => {
+    let over = null;
+    const onOver = (e) => {
+      if (e.pointerType && e.pointerType !== 'mouse') return;
+      const t = e.target.closest && e.target.closest(HOVER_SOUND);
+      if (t === over) return;
+      over = t;
+      if (t && !t.classList.contains('sound-toggle')) play('hover');
+    };
+    const onClick = (e) => { if (e.target.closest && e.target.closest(CLICK_SOUND) && !e.target.closest('.sound-toggle')) play('click'); };
+    const onHash = () => play('swish');
+    document.addEventListener('pointerover', onOver);
+    document.addEventListener('click', onClick, true);
+    window.addEventListener('hashchange', onHash);
+    return () => { document.removeEventListener('pointerover', onOver); document.removeEventListener('click', onClick, true); window.removeEventListener('hashchange', onHash); };
+  }, []);
+  const firstActive = useRef(true);
+  useEffect(() => { if (firstActive.current) { firstActive.current = false; return; } play('detent'); }, [activeIdx]);
 
   // Follow the URL: back/forward and direct links all land here.
   useEffect(() => {
@@ -860,6 +953,15 @@ export default function Portfolio() {
         .rail-nav-link:hover{color:var(--text)}
         .rail-nav-link.is-current{color:var(--text);font-weight:600}
         .floating-nav{position:fixed;top:32px;left:60px;z-index:100}
+        .peek{position:fixed;left:0;top:0;z-index:90;pointer-events:none;will-change:transform}
+        .peek-in{position:relative;background:#fff;padding:5px;border:1px solid rgba(26,26,24,.1);box-shadow:0 14px 32px -14px rgba(26,26,24,.4);opacity:0;transform:scale(.86);transform-origin:left center;transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1)}
+        .peek.is-on .peek-in{opacity:1;transform:none}
+        .peek-in img{display:none;max-width:230px;max-height:250px;width:auto;height:auto;-webkit-user-drag:none}
+        .peek-in img.is-cur{display:block}
+        .sound-toggle{position:fixed;right:24px;bottom:20px;z-index:100;display:flex;align-items:center;gap:8px;padding:6px 2px;background:none;border:0;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-mid)}
+        .sound-toggle:hover{color:var(--text)}
+        .sound-toggle i{width:6px;height:6px;background:var(--text-dim);display:block;transition:background .2s ease}
+        .sound-toggle i.is-on{background:#E3000F}
 
         /* A blocky, stepped underline sweep on hover — reads as pixels assembling left to right,
            not a smooth wipe. Applied to plain text links across the rail/footer/nav. */
@@ -934,7 +1036,7 @@ export default function Portfolio() {
            this card is the one nearest viewport-center */
         .pixel-bullet{display:inline-block;width:6px;height:6px;flex-shrink:0;opacity:.4;transition:opacity .2s}
         .pixel-bullet.is-active{opacity:1}
-        .card-title{font-size:clamp(15px,2.9cqw,24px);text-wrap:balance;font-weight:700;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
+        .card-title{font-size:clamp(15px,2.7cqw,24px);font-weight:700;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
         .card-desc{max-width:560px;font-size:12.5px;line-height:1.6;color:var(--text-mid);margin-bottom:14px}
         .card-metrics{display:flex;gap:20px;padding-top:12px;border-top:1px solid rgba(26,26,24,.08)}
         .metric{display:flex;flex-direction:column;gap:2px}
@@ -972,6 +1074,7 @@ export default function Portfolio() {
         .bento{display:flex;align-items:flex-start;gap:var(--gap)}
                 .bento-col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:var(--gap)}
         .bento-tile{position:relative;margin:0;flex:none;width:100%;overflow:hidden;background:rgba(26,26,24,.06);display:flex;align-items:center;justify-content:center}
+        .bento-anim{position:absolute;inset:0}
         .bento-img{display:block;width:100%;height:100%}
         .bento-img.is-matte{width:auto;height:auto;max-width:86%;max-height:86%}
         .bento-tile::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.5);opacity:0;transition:opacity .3s ease;pointer-events:none}
@@ -1074,6 +1177,8 @@ export default function Portfolio() {
       <CardCursor />
 
       <PixelTrail />
+      <SoundToggle />
+      <PeekCard />
 
       <div className="floating-nav">
         <PageNav page={page} goHome={goHome} goArchive={goArchive} goAbout={goAbout} />
@@ -1090,6 +1195,7 @@ export default function Portfolio() {
       {page === 'case' && caseIdx === 1 && <ScrollReveal><AdobeVision onNext={() => goCase(2)} /></ScrollReveal>}
       {page === 'case' && caseIdx === 2 && <ScrollReveal><ClassDiscovery onNext={() => goCase(3)} /></ScrollReveal>}
       {page === 'case' && caseIdx === 3 && <ScrollReveal><Onboarding onNext={() => goCase(0)} /></ScrollReveal>}
+      {page === 'aac' && <ScrollReveal><AACDevice onNext={() => goArchiveCase('archive')} /></ScrollReveal>}
       {page === 'gmaps' && <ScrollReveal><GoogleMaps onNext={() => goArchiveCase('archive')} /></ScrollReveal>}
       {page === 'zuora' && <ScrollReveal><Zuora onNext={() => goArchiveCase('archive')} /></ScrollReveal>}
       {page === 'colorful' && <ScrollReveal><Colorful onNext={() => goArchiveCase('archive')} /></ScrollReveal>}
@@ -1103,6 +1209,8 @@ export default function Portfolio() {
 
       </section>
       )}
+
+      {page === 'lab' && Lab3D && <Suspense fallback={null}><Lab3D /></Suspense>}
 
       {page === 'about' && (
       /* ── About: clean, resume-style — company / title / date rows, same width as the Work page ── */

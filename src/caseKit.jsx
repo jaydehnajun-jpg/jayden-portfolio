@@ -102,6 +102,21 @@ export const Frame = ({ src, alt = '', caption, max = 380, panel, wide, tint, ch
   );
 };
 
+// Full-width hero for the top of a case study. The image spans the whole content width; if it is taller than
+// `max` it is letterboxed on `tint` (pass the image's own background color so the band looks intentional).
+// `blend` multiplies a white-background image onto the tint so the white disappears.
+export const Hero = ({ src, alt = '', tint, blend, max = 620, children }) => {
+  const style = { width: '100%', height: 'auto', maxHeight: max, objectFit: 'contain', display: 'block', mixBlendMode: blend ? 'multiply' : undefined };
+  const isVideo = /\.mp4$/i.test(src || '');
+  return (
+    <div style={{ width: '100%', background: tint, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      {children ?? (isVideo
+        ? <video src={src} aria-label={alt} autoPlay loop muted playsInline style={style} />
+        : <AnimImg src={src} alt={alt} style={style} />)}
+    </div>
+  );
+};
+
 export const Card = ({ idx, title, children }) => (
   <div className="ck-card" style={{ border: `1px solid ${SOFT}`, padding: 26, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
     {title && <div style={{ ...TYPE.small, fontSize: 15, fontWeight: 600, color: INK }}>{title}</div>}

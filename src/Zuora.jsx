@@ -1,6 +1,6 @@
 // Archive case study: Zuora Design System. Content brought over from the original write-up (lightly
 // copy-edited); uses the shared case-study layout (caseKit). Images live in /assets/Zuora/.
-import { CaseLayout, Section, P, H3, Cards, Frame, Metrics, Quote, Callout } from './caseKit.jsx';
+import { CaseLayout, Section, P, H3, Cards, Frame, Metrics, Quote, Callout, Hero } from './caseKit.jsx';
 
 const Z = '/assets/Zuora/';
 
@@ -30,7 +30,7 @@ export default function Zuora({ onNext }) {
       tags={['Zuora', 'Design Systems', 'Accessibility']}
       title="Zuora Design System"
       subtitle="Bringing accessibility and clarity to internal sales dashboards."
-      hero={<Frame src={Z + 'thumbnail.png'} alt="Zuora design system foundations" max={420} />}
+      hero={<Hero src={Z + 'thumbnail.png'} alt="Zuora design system foundations" tint="#0E4945" />}
       meta={[
         ['Context', 'Unifying dozens of PowerBI sales dashboards'],
         ['Role', 'Lead Product Designer, mentored by 2 SalesOps Analysts'],

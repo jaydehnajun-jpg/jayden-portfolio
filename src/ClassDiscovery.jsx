@@ -1,5 +1,5 @@
 // Case study: Skillshare Class Discovery Redesign. Uses the shared case-study layout (caseKit).
-import { CaseLayout, Section, P, H3, Cards, Frame, Rows, Tag, Callout, Quote, Flow, Metrics, Label, TYPE, INK, LINE, SOFT } from './caseKit.jsx';
+import { CaseLayout, Section, P, H3, Cards, Frame, Rows, Tag, Callout, Quote, Flow, Metrics, Label, TYPE, INK, LINE, SOFT, Hero } from './caseKit.jsx';
 
 const BASE = '/assets/ClassDiscovery/';
 const I = {
@@ -31,7 +31,7 @@ export default function ClassDiscovery({ onNext }) {
       tags={['Skillshare', 'Interaction Design', 'UX Research']}
       title="Redesigning How Learners Choose a Class."
       subtitle="A redesign of how learners choose a class, built around how people actually decide instead of guessing and bouncing."
-      hero={<Frame src={I.hero} alt="Class discovery redesign mockup" max={400} />}
+      hero={<Hero src={I.hero} alt="Class discovery redesign mockup" tint="#E9E6DF" blend />}
       meta={[
         ['Context', 'Class discovery at Skillshare, redesigned so people feel confident about which class to take.'],
         ['Team', 'Jayden Kang · 1 PM · 3 Engineers'],

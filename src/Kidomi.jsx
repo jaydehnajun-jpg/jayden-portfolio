@@ -1,7 +1,7 @@
 // Archive case study: Ki.domi, a solo passion project helping senior citizens in Seoul use self-service
 // kiosks. Content brought over from the original write-up (lightly copy-edited); uses the shared
 // case-study layout (caseKit). Images live in /assets/Kidomi/.
-import { CaseLayout, Section, P, H3, Cards, Frame, Callout, Rows, Feature, Tag, TYPE } from './caseKit.jsx';
+import { CaseLayout, Section, P, H3, Cards, Frame, Callout, Rows, Feature, Tag, TYPE, Hero } from './caseKit.jsx';
 
 const K = '/assets/Kidomi/';
 
@@ -35,7 +35,7 @@ export default function Kidomi({ onNext }) {
       tags={['Ki.domi', 'Accessibility', 'Mobile App']}
       title="Ki.domi"
       subtitle="Helping senior citizens in Seoul feel confident with self-service machines."
-      hero={<Frame src={K + 'thumb.png'} alt="Ki.domi app screens" max={420} />}
+      hero={<Hero src={K + 'thumb.png'} alt="Ki.domi app screens" tint="#E6DDF7" />}
       meta={[
         ['Timeline', 'June – August 2022'],
         ['Context', 'Solo passion project'],

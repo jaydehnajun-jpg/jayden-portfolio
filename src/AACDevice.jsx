@@ -1,6 +1,6 @@
 // Case study: UW × Amazon RAISE, AI AAC Device. Content is Jayden's own write-up, lightly
 // condensed. Uses the shared case-study layout (caseKit). Images live in /assets/AAC/.
-import { CaseLayout, Section, P, H3, Cards, Card, Frame, Split, Feature, Quote, Metrics, Label, Tag, Sq, TYPE, INK, LINE, SOFT } from './caseKit.jsx';
+import { CaseLayout, Section, P, H3, Cards, Card, Frame, Split, Feature, Quote, Metrics, Label, Tag, Sq, TYPE, INK, LINE, SOFT, Hero } from './caseKit.jsx';
 
 const A = '/assets/AAC/';
 
@@ -53,7 +53,7 @@ export default function AACDevice({ onNext }) {
       tags={['UW × Amazon RAISE', 'Research', 'Design']}
       title="AI AAC Device for Children with Autism"
       subtitle="Imagining a schedule-first AI AAC prototype for children with autism and their caregivers."
-      hero={<Frame src={A + 'aacmain.png'} alt="Schedule-first AAC prototype on a tablet" max={400} />}
+      hero={<Hero src={A + 'aacmain-tile.png'} alt="Schedule-first AAC prototype on a tablet" tint="#E9E6DF" blend />}
       meta={[
         ['Team', 'Jayden Kang · Henson Chen · Kathryn Rambo'],
         ['Timeline', 'July – September 2025 · Ongoing'],

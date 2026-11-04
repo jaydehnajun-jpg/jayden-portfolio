@@ -2,7 +2,7 @@
 // over from the original write-up (lightly copy-edited); uses the shared case-study layout (caseKit).
 // Images live in /assets/Colorful/; the hero reuses the Archive GIF. Pillar colors come from the
 // original page: green = community, pink = empowerment, yellow = flexibility.
-import { CaseLayout, Section, P, H3, Frame, Callout, Label, Rows, Feature as SplitFeature, TYPE, INK } from './caseKit.jsx';
+import { CaseLayout, Section, P, H3, Frame, Callout, Label, Rows, Feature as SplitFeature, TYPE, INK, Hero } from './caseKit.jsx';
 
 const C = '/assets/Colorful/';
 
@@ -104,7 +104,7 @@ export default function Colorful({ onNext }) {
       tags={['Designathon', 'Accessibility', 'Product Design']}
       title="Colorful"
       subtitle="Creating inclusive youth communities with arts education."
-      hero={<Frame src="/assets/Archive/colorful.gif" alt="Colorful app on a tablet" max={420} />}
+      hero={<Hero src="/assets/Archive/colorful.gif" alt="Colorful app on a tablet" tint="#E4DCCF" />}
       meta={[
         ['Timeline', '48-hour design sprint, April 2023'],
         ['Team', 'Jayden Kang · Megan Phi · Amy La · William Han'],

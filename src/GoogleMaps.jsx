@@ -1,6 +1,6 @@
 // Archive case study: Google Maps feature proposal (route optimization). Content brought over from
 // the original write-up; uses the shared case-study layout (caseKit). Images in /assets/GoogleMaps/.
-import { CaseLayout, Section, P, Callout, Frame, Feature, TYPE, INK } from './caseKit.jsx';
+import { CaseLayout, Section, P, Callout, Frame, Feature, TYPE, INK, Hero } from './caseKit.jsx';
 
 const G = '/assets/GoogleMaps/';
 const HERO = '/assets/Archive/gmap.png';
@@ -19,7 +19,7 @@ export default function GoogleMaps({ onNext }) {
       tags={['Feature Proposal', 'UX Research', 'UI Exploration']}
       title="Google Maps Route Optimization"
       subtitle="A feature proposal for making multi-stop trips on Google Maps simpler to plan."
-      hero={<Frame src={HERO} alt="Multi-stop route options on Google Maps" max={420} />}
+      hero={<Hero src={HERO} alt="Multi-stop route options on Google Maps" tint="#E9E6DF" />}
       meta={[['Timeline', 'March – April 2024'], ['Scope', 'UX Research · UI Exploration'], ['Team', 'Solo Project']]}
       sections={SECTIONS}
       next={{ eyebrow: 'Back to', title: 'Experimentation', cta: 'Back to experimentation', onNext }}

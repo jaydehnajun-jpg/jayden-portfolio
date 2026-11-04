@@ -1,6 +1,6 @@
 // Short-form case study for Skillshare Onboarding & Member Home, written from Jayden's own
 // account with no invented details. Uses the shared case-study layout.
-import { CaseLayout, Section, P, Cards, Frame, Rows } from './caseKit.jsx';
+import { CaseLayout, Section, P, Cards, Frame, Rows, Hero } from './caseKit.jsx';
 
 const VIDEO = '/assets/Onboarding/onboardingvid.mp4';
 
@@ -25,11 +25,7 @@ export default function Onboarding({ onNext }) {
       tags={['Skillshare', 'Product Design', 'Experimentation']}
       title="Helping New Members Take Their First Step Faster."
       subtitle="Helping new members actually start learning by cutting the steps between signing up and their first real action."
-      hero={
-        <Frame max={420}>
-          <video src={VIDEO} autoPlay loop muted playsInline style={{ maxWidth: '100%', maxHeight: 420, display: 'block' }} />
-        </Frame>
-      }
+      hero={<Hero src={VIDEO} alt="The redesigned Skillshare onboarding" tint="#C2CBBC" />}
       meta={[['Role', 'Sole Product Designer'], ['Team', '1 PM · 3 Engineers'], ['Timeline', '~3–4 months, multiple design sprints']]}
       outcomes={{ items: [
         ['+4.3pp Retention', 'Measured through A/B tests by cohort'],
@@ -37,7 +33,7 @@ export default function Onboarding({ onNext }) {
         ['3 Activation Steps', 'Save a class, follow a teacher, watch a lesson'],
       ] }}
       sections={SECTIONS}
-      next={{ title: "Connecting Adobe's AI Agents to the Tools You Already Use.", onNext }}
+      next={{ title: "Bringing Adobe's AI Agents to the Apps You Already Use.", onNext }}
     >
       <Section id="problem" title="Too many steps, too many drop-offs.">
         <P>
