@@ -184,6 +184,27 @@ function SideRail({ hot }) {
   );
 }
 
+// Hover feel shared by the work cards and the Kind words cards: the element's first child leans a couple of
+// degrees toward the pointer and the pointer position goes out as CSS vars (--tx/--ty for parallax, --gx/--gy
+// for the sheen). Kept gentle on purpose, anything stronger visibly warps the image. It lives on an inner
+// wrapper because .card's own transform belongs to the scroll-driven focus animation.
+function tiltCard(e) {
+  if (e.pointerType !== 'mouse') return;
+  const t = e.currentTarget.firstChild, r = e.currentTarget.getBoundingClientRect();
+  const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+  t.style.setProperty('--ry', `${((px - 0.5) * 3).toFixed(2)}deg`);
+  t.style.setProperty('--rx', `${(-(py - 0.5) * 3).toFixed(2)}deg`);
+  t.style.setProperty('--tx', (px - 0.5).toFixed(3));
+  t.style.setProperty('--ty', (py - 0.5).toFixed(3));
+  t.style.setProperty('--gx', `${(px * 100).toFixed(1)}%`);
+  t.style.setProperty('--gy', `${(py * 100).toFixed(1)}%`);
+}
+function untiltCard(e) {
+  const t = e.currentTarget.firstChild;
+  t.style.setProperty('--ry', '0deg'); t.style.setProperty('--rx', '0deg');
+  t.style.setProperty('--tx', '0'); t.style.setProperty('--ty', '0');
+}
+
 // ── Right column: scroll-driven stack of cards. Each card's company label carries a pixel-bullet
 // marker that fills in when that card is the one nearest viewport-center — the active-state cue
 // the removed "Selected Work" TOC used to carry, now living on the cards themselves. ──
@@ -245,15 +266,18 @@ function WorkStack({ activeIdx, onActiveChange, onOpenCase }) {
           role="link" tabIndex={0} aria-label={`${c.company}: ${c.title}`}
           onClick={() => onOpenCase(i)}
           onKeyDown={(e) => { if (e.key === 'Enter') onOpenCase(i); }}
+          onPointerMove={tiltCard} onPointerLeave={untiltCard}
         >
-          <div className="card-media">
-            {c.media}
-            {c.current && <span className="card-badge">Currently</span>}
-          </div>
-          <div className="card-body">
-            <span className="card-company"><span className={`pixel-bullet${i === activeIdx ? ' is-active' : ''}`} style={{ background: c.color }} />{c.company}</span>
-            <h3 className="card-title">{c.title}</h3>
-            <p className="card-tags">{c.tags.map((t, j) => <span key={t}>{j > 0 && <i />}{t}</span>)}</p>
+          <div className="card-tilt">
+            <div className="card-media">
+              {c.media}
+              {c.current && <span className="card-badge">Currently</span>}
+            </div>
+            <div className="card-body">
+              <span className="card-company"><span className={`pixel-bullet${i === activeIdx ? ' is-active' : ''}`} style={{ background: c.color }} />{c.company}</span>
+              <h3 className="card-title">{c.title}</h3>
+              <p className="card-tags">{c.tags.map((t, j) => <span key={t}>{j > 0 && <i />}{t}</span>)}</p>
+            </div>
           </div>
         </div>
       ))}
@@ -550,25 +574,49 @@ const ART_HEART = {
   palette: { r: '#E0455B' },
   rows: ['.rr...rr.', 'rrrr.rrrr', 'rrrrrrrrr', 'rrrrrrrrr', '.rrrrrrr.', '..rrrrr..', '...rrr...', '....r....'],
 };
-// Recommendations from Skillshare colleagues, quoted as written (Melissa's is cut at the last complete sentence).
+// Recommendations from Skillshare colleagues, quoted as written (trimmed to whole sentences).
+// `photo` is a square headshot in public/assets/Kind/; without one the card shows an initial.
 const KIND_WORDS = [
   {
     name: 'Sharon Byun',
+    photo: '/assets/Kind/sharon.jpg',
     role: 'Lead Product Designer, Skillshare',
-    text: [
-      "I had the pleasure of mentoring Jayden during her internship at Skillshare, and I can confidently say she’s an exceptional designer. Jayden quickly grasped the goal and context of our projects, bringing a strong understanding of design principles such as accessibility, and a real passion for creating user-centered solutions asking bold questions.",
-      "What stood out most was her ability to blend creativity with practicality—producing polished, functional designs while always keeping user needs top of mind, juggling stakeholder’s requirements and feedback. She was proactive in seeking feedback, iterative in their process, and consistently demonstrated a collaborative and positive attitude.",
-      "I have no doubt that Jayden has a bright future ahead in product design, and I highly recommend her for any design role.",
-    ],
+    text: "What stood out most was her ability to blend creativity with practicality, producing polished, functional designs while always keeping user needs top of mind. I have no doubt that Jayden has a bright future ahead in product design, and I highly recommend her for any design role.",
   },
   {
     name: 'Melissa Lyons',
-    role: 'Manager at Skillshare',
-    text: [
-      "Jayden was an incredible Product Design Intern at Skillshare in the fall of 2024. She took on foundational projects, feature improvements, and growth marketing iterations within just three months and impressed us with her ability to move initiatives forward efficiently while incorporating feedback from multiple directions. Within her first month, she was independently tackling projects, conducting competitive analyses, user research, and deep dives into current functionality, uncovering insights that might have otherwise been missed. Despite her short time with us, she made a significant impact on our team.",
-    ],
+    photo: '/assets/Kind/melissa.jpg',
+    role: 'VP of Product, Skillshare',
+    text: "Jayden was an incredible Product Design Intern at Skillshare in the fall of 2024. Within her first month, she was independently tackling projects, conducting competitive analyses, user research, and deep dives into current functionality, uncovering insights that might have otherwise been missed.",
   },
 ];
+
+const LINKEDIN_URL = 'https://www.linkedin.com/in/jaydenhkang/';
+const CONTACT_EMAIL = 'jaydehnajun@gmail.com';
+
+// Footer: a small thank-you, the LinkedIn link, and an email address that copies on click.
+// `snapEnd` is for the home page only: html uses mandatory scroll-snap there, so the footer needs its own snap point
+// to be reachable. On every other page it would be the only snap point and drag each scroll to the bottom.
+function SiteFooter({ snapEnd }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1800); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(CONTACT_EMAIL).then(done, done);
+    else done();
+  };
+  return (
+    <footer className={`site-footer${snapEnd ? ' snap-end' : ''}`}>
+      <p className="footer-msg">Thanks for stopping by. If something here made you smile, I'd love to say hi <span className="footer-smile" aria-hidden="true" /></p>
+      <div className="footer-links">
+        <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" className="pixel-underline">LinkedIn ↗</a>
+        <button type="button" className="footer-copy pixel-underline" onClick={copy} aria-live="polite">
+          {copied ? 'Email copied ✓' : 'Copy email'}
+        </button>
+      </div>
+      <span className="footer-name">Jayden Kang · 2026</span>
+    </footer>
+  );
+}
 
 // About story: three short paragraphs; the pixel illustrations sit mid-sentence like inline icons.
 const ABOUT_STORY = [
@@ -993,17 +1041,23 @@ export default function Portfolio() {
         .card-cursor>div i{width:6px;height:6px;background:var(--c,#fff)}
         .card-cursor.on>div{opacity:1;transform:none}
         .card-media>*{transition:transform .7s cubic-bezier(.2,.7,.2,1)}
-        .card:hover .card-media>*{transform:scale(1.025)}
-        @media (prefers-reduced-motion:reduce){.card:hover .card-media>*{transform:none}}
+        .card:hover .card-media>*{transform:scale(1.05) translate(calc(var(--tx,0) * -10px),calc(var(--ty,0) * -8px))}
+        .card{perspective:900px}
+        .card-tilt{translate:0 0;transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .6s cubic-bezier(.34,1.4,.64,1),translate .6s cubic-bezier(.34,1.56,.64,1)}
+        .card:hover .card-tilt{translate:0 -6px}
+        /* a soft light that follows the pointer across the image, like a reflection on a raised surface */
+        .card-media::after{content:'';position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .4s ease;background:radial-gradient(circle at var(--gx,50%) var(--gy,50%),rgba(255,255,255,.28),rgba(255,255,255,0) 55%)}
+        .card:hover .card-media::after{opacity:1}
+        @media (hover:none),(prefers-reduced-motion:reduce){.card-tilt{transform:none!important;translate:none!important}.card-media::after{display:none}}
         .brand .pixel-bullet{margin-right:4px;vertical-align:middle}
 
         .rail-rule{height:1px;background:var(--border)}
         .rail-label{font-size:11px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim)}
 
         /* ── RIGHT COLUMN ── */
-        .stack{display:flex;flex-direction:column;gap:28px;padding-top:var(--top);padding-bottom:30vh}
+        .stack{display:flex;flex-direction:column;gap:28px;padding-top:var(--top);padding-bottom:8vh}
 
-        .card{position:relative;width:100%;border-radius:0;overflow:hidden;display:flex;flex-direction:column;background:transparent;transform-origin:center center;will-change:transform,opacity;scroll-margin-top:var(--top);scroll-snap-align:center;cursor:pointer}
+        .card{position:relative;width:100%;border-radius:0;overflow:visible;display:flex;flex-direction:column;background:transparent;transform-origin:center center;will-change:transform,opacity;scroll-margin-top:var(--top);scroll-snap-align:center;cursor:pointer}
         .card:focus-visible{outline:2px solid var(--text);outline-offset:4px}
 
         /* Native scroll-driven animation — runs on the compositor, exactly synced to the same
@@ -1095,8 +1149,7 @@ export default function Portfolio() {
         .about-hero{display:flex;gap:40px;align-items:stretch}
         .about-photo{width:320px;height:auto;align-self:stretch;object-fit:cover;object-position:center 38%;flex-shrink:0;display:block}
         .about-hero-text{flex:1;padding-top:4px;display:flex;flex-direction:column;gap:10px}
-        @font-face{font-family:'DreamHeumul';src:url('/fonts/DreamHeumulKR.ttf') format('truetype');font-display:swap}
-        .about-name{font-family:'DreamHeumul',cursive;font-size:52px;font-weight:400;letter-spacing:0;line-height:1.1}
+        .about-name{font-size:44px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
         .about-tagline{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
         .about-bio{font-size:16px;line-height:1.75;color:var(--text-mid);max-width:620px}
         .px-inline{display:inline-block;height:1.75em;vertical-align:top;margin:0 .1em}
@@ -1122,7 +1175,28 @@ export default function Portfolio() {
         @media (max-width:860px){.ad-dialog{padding:24px 20px 28px}}
         .about-sec{display:grid;grid-template-columns:200px minmax(0,1fr);gap:64px;border-top:1px solid #1A1A18;padding-top:24px}
         .kind-list{display:flex;flex-direction:column;gap:40px}
-        .kind blockquote{display:flex;flex-direction:column;gap:12px;font-size:16px;line-height:1.7;color:var(--text)}
+        .kind blockquote{font-size:16px;line-height:1.7;color:var(--text)}
+        .kind-band{position:relative;z-index:1;margin-top:80px;background:#EDE8E0;border-top:1px solid rgba(26,26,24,.1);scroll-snap-align:start;scroll-margin-top:0}
+        .kind-sec{max-width:1280px;padding:96px 60px 104px;display:grid;grid-template-columns:260px 1fr;gap:48px;align-items:start}
+        .kind-head{display:flex;flex-direction:column;gap:8px}
+        .kind-sub{font-size:13px;line-height:1.5;color:var(--text-mid)}
+        .kind-title{font-size:20px;font-weight:600;letter-spacing:-.015em;line-height:1.2;color:var(--text)}
+        .kind-sec .kind-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+        /* the cards share the work cards' tilt and sit on the section like paper on a desk */
+        .kind-sec .kind{perspective:900px}
+        .kind-in{translate:0 0;transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .6s cubic-bezier(.34,1.4,.64,1),translate .6s cubic-bezier(.34,1.56,.64,1);height:100%;background:#FBFAF7;border:1px solid rgba(26,26,24,.1);padding:28px;display:flex;flex-direction:column;gap:20px}
+        .kind-quote{display:block;font-size:44px;line-height:.6;height:22px;font-weight:600;color:#00A86B}
+        .kind-sec .kind blockquote{font-size:14px;line-height:1.7;color:var(--text);flex:1}
+        .kind-sec .kind figcaption{margin:0;display:flex;align-items:center;gap:16px;flex-wrap:nowrap;color:inherit}
+        .kind-pic{width:52px;height:52px;flex-shrink:0;object-fit:cover;display:grid;place-items:center;background:#00A86B;color:#fff;font-size:20px;font-weight:600;box-shadow:4px 4px 0 #00A86B;transition:transform .35s cubic-bezier(.34,1.56,.64,1),box-shadow .35s cubic-bezier(.34,1.56,.64,1)}
+        .kind-sec .kind:hover .kind-in{translate:0 -5px}
+        .kind-sec .kind:hover .kind-pic{transform:translate(-2px,-2px);box-shadow:6px 6px 0 #00A86B}
+        .kind-who{display:flex;flex-direction:column;gap:3px;font-family:'Open Sauce Sans',sans-serif;font-size:13px;letter-spacing:0;color:var(--text-mid)}
+        .kind-sec .kind-who strong{color:var(--text);font-weight:600;font-size:15px}
+        @media (hover:none),(prefers-reduced-motion:reduce){.kind-in,.kind-sec .kind:hover .kind-pic{transform:none!important;translate:none!important}}
+        @media (max-width:1100px){.kind-sec{grid-template-columns:1fr;gap:28px}}
+        @media (min-width:1500px){.kind-sec{max-width:1400px;grid-template-columns:320px 1fr;gap:80px}}
+        @media (min-width:1900px){.kind-sec{max-width:1560px;grid-template-columns:360px 1fr;gap:96px}}
         .kind figcaption{margin-top:14px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.04em;color:var(--text-dim);display:flex;gap:10px;flex-wrap:wrap}
         .kind figcaption strong{color:var(--text);font-weight:500}
         .about-block{display:flex;flex-direction:column;gap:24px;border-top:1px solid #1A1A18;padding-top:24px}
@@ -1156,7 +1230,15 @@ export default function Portfolio() {
           .archive-page{--gap:6px}
         }
 
-        footer{border-top:1px solid var(--border);padding:24px 60px}
+        .site-footer{border-top:1px solid var(--border);padding:56px 60px 32px;display:flex;flex-direction:column;gap:16px}
+        .site-footer.snap-end{scroll-snap-align:end}
+        .footer-msg{font-size:14px;line-height:1.6;color:var(--text);max-width:420px}
+        .footer-smile{display:inline-block;font-family:'DM Mono',monospace;transform:rotate(90deg);transition:transform .4s cubic-bezier(.2,.7,.2,1)}
+        .footer-smile::before{content:':)'}
+        .footer-msg:hover .footer-smile{transform:rotate(90deg) scale(1.25)}
+        .footer-msg:hover .footer-smile::before{content:':D'}
+        .footer-links{display:flex;gap:24px;font-size:13px;font-weight:600}
+        .footer-links a,.footer-copy{color:var(--text);text-decoration:none;background:none;border:0;padding:0;font:inherit;cursor:pointer}
         .footer-name{font-size:12px;color:var(--text-dim)}
 
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:rgba(26,26,24,.12);border-radius:2px}
@@ -1168,6 +1250,12 @@ export default function Portfolio() {
         @media (max-width: 860px){
           html{scroll-snap-type:none}
           .page{grid-template-columns:1fr;padding:72px 24px 40px}
+          .kind-band{margin-top:64px}
+          .kind-sec{grid-template-columns:1fr;gap:24px;padding:64px 24px 72px}
+          .kind-sec .kind-list{grid-template-columns:1fr}
+          .rail{align-items:center}
+          .intro-text{max-width:520px;font-size:15px}
+          .site-footer{padding:48px 24px 28px}
           .rail{position:relative;top:0;margin-bottom:32px}
           .stack{padding-top:0;gap:24px}
         }
@@ -1189,6 +1277,31 @@ export default function Portfolio() {
           <SideRail hot={CARDS[activeIdx] && CARDS[activeIdx].company} />
           <WorkStack activeIdx={activeIdx} onActiveChange={setActiveIdx} onOpenCase={goCase} />
         </div>
+      )}
+
+      {page === 'home' && (
+        <section className="kind-band" aria-labelledby="kind-title">
+          <div className="kind-sec">
+            <div className="kind-head">
+              <h2 id="kind-title" className="kind-title">Kind words <span className="footer-smile" aria-hidden="true" /></h2>
+              <p className="kind-sub">From teammates at Skillshare.</p>
+            </div>
+            <div className="kind-list">
+              {KIND_WORDS.map((q) => (
+                <figure className="kind" key={q.name} onPointerMove={tiltCard} onPointerLeave={untiltCard}>
+                  <div className="kind-in">
+                    <span className="kind-quote" aria-hidden="true">“</span>
+                    <blockquote>{q.text}</blockquote>
+                    <figcaption>
+                      {q.photo ? <img className="kind-pic" src={q.photo} alt="" /> : <span className="kind-pic" aria-hidden="true">{q.name[0]}</span>}
+                      <span className="kind-who"><strong>{q.name}</strong>{q.role}</span>
+                    </figcaption>
+                  </div>
+                </figure>
+              ))}
+            </div>
+          </div>
+        </section>
       )}
 
       {page === 'case' && caseIdx === 0 && <ScrollReveal><AdobeTooling onNext={() => goCase(1)} /></ScrollReveal>}
@@ -1218,7 +1331,7 @@ export default function Portfolio() {
         <div className="about-hero">
           <img src={PROFILE_IMG} alt="Jayden Kang" className="about-photo" />
           <div className="about-hero-text">
-            <h1 className="about-name">Jayden Kang</h1>
+            <h1 className="about-name">Hey, I'm Jayden!</h1>
             <span className="about-tagline">Product Designer · Inclusive UX · Systems Thinking</span>
             {ABOUT_STORY.map((segs, i) => (
               <p className="about-bio" key={i}>
@@ -1267,18 +1380,6 @@ export default function Portfolio() {
         </div>
         </div>
 
-        <div className="about-sec">
-        <span className="about-label"><i />Kind words</span>
-        <div className="kind-list">
-          {KIND_WORDS.map((q) => (
-            <figure className="kind" key={q.name}>
-              <blockquote>{q.text.map((para, i) => <p key={i}>{para}</p>)}</blockquote>
-              <figcaption><strong>{q.name}</strong>{q.role}</figcaption>
-            </figure>
-          ))}
-        </div>
-        </div>
-
         <div className="about-block">
         <span className="about-label"><i />Outside of Design</span>
         <HobbyRow />
@@ -1286,9 +1387,7 @@ export default function Portfolio() {
       </section>
       )}
 
-      <footer>
-        <span className="footer-name">Jayden Kang · 2026</span>
-      </footer>
+      <SiteFooter snapEnd={page === 'home'} />
     </>
   );
 }
