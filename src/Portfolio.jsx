@@ -16,7 +16,7 @@ import AdobeAnim from "./AdobeAnim.jsx";
 import AdobeVisionAnim from "./AdobeVisionAnim.jsx";
 import { AnimImg } from "./caseKit.jsx";
 import { MapsAnim, AACAnim, ZuoraAnim, NordAnim } from "./ExpAnims.jsx";
-import { play, playBloom, playSparkle, isOn, setOn, subscribe } from "./sound.js";
+import { play, playBloom, playSparkle, isOn, setOn, subscribe, isReady, unlockAudio } from "./sound.js";
 
 // Dev-only sandbox for 3D ideas (#/lab). Tree-shaken out of production builds.
 const Lab3D = import.meta.env.DEV ? lazy(() => import("./Lab3D.jsx")) : null;
@@ -788,11 +788,32 @@ function Loader({ onDone, quiet }) {
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
   const t0 = useRef(fieldTime()).current;
+  const rel = useRef(null);            // when the curtain starts to clear (null = still holding)
+  const [gate, setGate] = useState(false);
   const HOLD = 1.7, CLEAR = 1.5;   // seconds: breathing in, then clearing outward
+  // Browsers keep audio locked until the visitor clicks or presses a key, so the chimes would never be heard if the intro ran by
+  // itself. If audio is locked, the intro holds (breathing) with a "click to enter with sound" hint: a click unlocks the sound and
+  // the curtain clears with the chimes. If nobody clicks within a few seconds it carries on silently.
   useEffect(() => {
-    playSparkle(0, (HOLD + CLEAR) * 1000);   // chimes from the very start; silent until the browser lets audio start (it needs a click or key first)
-    const id = setTimeout(() => onDoneRef.current(), (HOLD + CLEAR + 0.15) * 1000);
-    return () => clearTimeout(id);
+    let done = false, wait = 0, fin = 0;
+    const release = (hold, chimes) => {
+      if (done) return;
+      done = true; clearTimeout(wait); setGate(false);
+      rel.current = fieldTime() + hold;
+      if (chimes) playSparkle(0, (hold + CLEAR) * 1000);
+      fin = setTimeout(() => onDoneRef.current(), (hold + CLEAR + 0.15) * 1000);
+    };
+    const ev = ['pointerdown', 'keydown'];
+    const go = () => { off(); unlockAudio().then(() => release(0.9, true)); };
+    const off = () => ev.forEach((e) => window.removeEventListener(e, go));
+    if (!isOn()) release(HOLD, false);
+    else if (isReady()) release(HOLD, true);
+    else {
+      setGate(true);
+      ev.forEach((e) => window.addEventListener(e, go));
+      wait = setTimeout(() => { off(); release(0.4, false); }, 4800);
+    }
+    return () => { done = true; off(); clearTimeout(wait); clearTimeout(fin); };
   }, []);
   // Each cell clears on its own schedule: a loose pull from the centre outward, mostly scatter, so the
   // curtain breaks up irregularly (like pixels dropping out) instead of sweeping away as one clean edge.
@@ -805,16 +826,16 @@ function Loader({ onDone, quiet }) {
   };
   // 1 = still part of the curtain, 0 = cleared (now just the page background)
   const keep = (i, j, cx, cy, w, h, T) => {
-    const t = T - t0;
-    if (t <= HOLD) return 1;
-    const th = clearAt(i, j, cx, cy, w, h) * (1 - WIN), p = (t - HOLD) / CLEAR;
+    const R = rel.current;
+    if (R === null || T <= R) return 1;
+    const th = clearAt(i, j, cx, cy, w, h) * (1 - WIN), p = (T - R) / CLEAR;
     return 1 - smoothstep(th, th + WIN, p);
   };
   // The cream sheet behind the glyphs goes transparent more gently than the glyphs do: it fades out a little ahead of
   // them and is drawn from a tiny per-cell map scaled up smoothly, so no square ever shows as it disappears.
   const sheet = useRef(null);
   const sheetKeep = (i, j, cx, cy, w, h, T) => {
-    const p = (T - t0 - HOLD) / CLEAR;
+    const R = rel.current, p = R === null ? 0 : (T - R) / CLEAR;
     if (p <= 0) return 1;
     const st = clearAt(i, j, cx, cy, w, h) * 0.55;
     return 1 - smoothstep(st, st + 0.35, p);
@@ -831,10 +852,9 @@ function Loader({ onDone, quiet }) {
   const pre = (ctx, { w, h, dpr, t: T, cell }) => {
     updateAvoid();
     // cream sheet under the glyphs (smooth, see sheetKeep)
-    const t = T - t0;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#F5F2EE';
-    if (t <= HOLD) { ctx.fillRect(0, 0, w, h); return; }
+    if (rel.current === null || T <= rel.current) { ctx.fillRect(0, 0, w, h); return; }
     const cols = Math.ceil(w / cell) + 1, rows = Math.ceil(h / cell) + 1;
     if (!sheet.current) sheet.current = document.createElement('canvas');
     const sc = sheet.current;
@@ -850,7 +870,12 @@ function Loader({ onDone, quiet }) {
     ctx.drawImage(sc, 0, 0, cols * cell, rows * cell);
     ctx.globalAlpha = 1;
   };
-  return <ParamField className="loader" cell={FIELD_CELL} alpha={1} aFn={aFn} sFn={sFn} bFn={bFn} pre={pre} fps={45} />;
+  return (
+    <>
+      <ParamField className="loader" cell={FIELD_CELL} alpha={1} aFn={aFn} sFn={sFn} bFn={bFn} pre={pre} fps={45} />
+      {gate && <div className="loader-hint" aria-live="polite"><span>Click anywhere to enter, with sound</span></div>}
+    </>
+  );
 }
 const smoothstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -1028,10 +1053,11 @@ function PeekCard() {
 // Corner switch for the UI sounds (see sound.js). Remembered between visits.
 function SoundToggle() {
   const [on, setLocal] = useState(isOn());
-  useEffect(() => subscribe(setLocal), []);
+  const [ready, setReady] = useState(false);
+  useEffect(() => { setReady(isReady()); return subscribe((v) => { setLocal(v); setReady(isReady()); }); }, []);
   return (
     <button type="button" className="sound-toggle" onClick={() => setOn(!on)} aria-pressed={on} aria-label={on ? 'Turn sound off' : 'Turn sound on'}>
-      <i className={on ? 'is-on' : ''} />Sound {on ? 'on' : 'off'}
+      <i className={on && ready ? 'is-on' : ''} />{on ? (ready ? 'Sound on' : 'Click for sound') : 'Sound off'}
     </button>
   );
 }
@@ -1485,6 +1511,9 @@ export default function Portfolio() {
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:rgba(26,26,24,.12);border-radius:2px}
 
         .loader{position:fixed;inset:0;z-index:5000;width:100vw;height:100vh;display:block}
+        .loader-hint{position:fixed;left:0;right:0;bottom:12vh;z-index:5001;display:flex;justify-content:center;pointer-events:none;animation:loaderHint .6s ease .5s both}
+        .loader-hint span{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text);background:var(--bg);padding:8px 14px}
+        @keyframes loaderHint{from{opacity:0}to{opacity:1}}
 
         @media (max-width: 860px){
           html{scroll-snap-type:none}

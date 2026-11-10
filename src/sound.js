@@ -4,7 +4,7 @@
 // is remembered in localStorage; a small toggle in the corner of the page flips it.
 
 const KEY = 'jk-sound';
-const MASTER = 0.9;
+const MASTER = 1.6;
 
 let ctx = null, master = null;
 const last = {};
@@ -27,14 +27,27 @@ function ensure() {
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return null;
   ctx = new AC();
-  master = ctx.createGain(); master.gain.value = MASTER; master.connect(ctx.destination);
+  master = ctx.createGain(); master.gain.value = MASTER;
+  const comp = ctx.createDynamicsCompressor();   // lets the master gain be generous without clipping when notes overlap
+  master.connect(comp); comp.connect(ctx.destination);
+  ctx.onstatechange = () => subs.forEach((fn) => fn(on));
   return ctx;
+}
+
+// Is audio allowed to play right now? (false until the visitor has clicked or pressed a key, unless the browser allows autoplay)
+export const isReady = () => { const c = ensure(); return !!c && c.state === 'running'; };
+// Start audio from inside a gesture; resolves once it is running (or has failed)
+export function unlockAudio() {
+  const c = ensure();
+  if (!c) return Promise.resolve(false);
+  if (c.state === 'running') return Promise.resolve(true);
+  return c.resume().then(() => c.state === 'running', () => false);
 }
 
 // unlock on the first real gesture
 const unlock = () => { const c = ensure(); if (c && c.state === 'suspended') c.resume(); };
 if (typeof window !== 'undefined') {
-  ['pointerdown', 'keydown', 'touchstart'].forEach((e) => window.addEventListener(e, unlock, { once: false, passive: true }));
+  ['pointerdown', 'pointerup', 'click', 'keydown', 'touchstart', 'touchend'].forEach((e) => window.addEventListener(e, unlock, { once: false, passive: true }));
 }
 
 // a short enveloped tone
