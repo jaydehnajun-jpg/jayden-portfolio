@@ -199,7 +199,7 @@ export function breathe(i, j, cols, rows, t) {
 }
 
 // ── Canvas field. `bFn(i, j, cols, rows, t, mouse, cx, cy)` decides how open each cell is. ──
-export function ParamField({ cell = 40, alpha = 1, bFn = breathe, aFn, sFn, pre, className, style, reactive = false, still = false, fps = 30 }) {
+export function ParamField({ cell = 40, alpha = 1, bFn = breathe, aFn, sFn, pre, className, style, reactive = false, local = false, still = false, fps = 30 }) {
   const ref = useRef(null);
   const props = useRef({ bFn, pre, alpha, aFn, sFn });
   props.current = { bFn, pre, alpha, aFn, sFn };
@@ -251,11 +251,14 @@ export function ParamField({ cell = 40, alpha = 1, bFn = breathe, aFn, sFn, pre,
       draw((now - FIELD_T0) / 1000);
     };
     raf = requestAnimationFrame(frame);
-    const onMove = (e) => { mouse.x = e.clientX; mouse.y = e.clientY; };
+    const onMove = (e) => {
+      if (local) { const r = cv.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; }   // a field that is not full-screen wants its own coordinates
+      else { mouse.x = e.clientX; mouse.y = e.clientY; }
+    };
     if (reactive) window.addEventListener('mousemove', onMove, { passive: true });
     window.addEventListener('resize', resize);
     return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); window.removeEventListener('mousemove', onMove); };
-  }, [cell, reactive, still, fps]);
+  }, [cell, reactive, local, still, fps]);
   return <canvas ref={ref} className={className} style={style} aria-hidden="true" />;
 }
 

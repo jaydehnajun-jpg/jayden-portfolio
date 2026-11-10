@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react"
 import { flushSync } from "react-dom";
 import { ParamField, Glyph, breathe, fieldTime, cellNoise } from "./Glyphs.jsx";
 import { MAP } from "./worldMap.js";
-import { loadStickers, placeSticker, usedCount, STICKER_LIMIT } from "./stickers.js";
 import ClassDiscovery from "./ClassDiscovery.jsx";
 import Onboarding from "./Onboarding.jsx";
 import AACDevice from "./AACDevice.jsx";
@@ -183,11 +182,12 @@ const Twinkle = ({ color, size }) => (
   <svg width={size} height={size} viewBox="-1 -1 2 2" aria-hidden="true"><path d="M0 -1Q.1 -.1 1 0Q.1 .1 0 1Q-.1 .1 -1 0Q-.1 -.1 0 -1Z" fill={color} /></svg>
 );
 
-function PageNav({ page, goHome, goArchive, goAbout }) {
+function PageNav({ page, goHome, goArchive, goAbout, goHandmade }) {
   return (
     <nav className="rail-nav" aria-label="Primary">
       <a href="#work-0" className={`rail-nav-link link-underline${page === 'home' || page === 'case' ? ' is-current' : ''}`} onClick={goHome('work-0')}>Work</a>
       <a href="#experimentation" className={`rail-nav-link link-underline${page === 'archive' || ARCHIVE_PAGE_KEYS.includes(page) ? ' is-current' : ''}`} onClick={goArchive}>Tinkering<span className="sparkles" aria-hidden="true"><Twinkle color="#F2B600" size={13} /><Twinkle color="#D5287A" size={10} /><Twinkle color="#2D5BD6" size={12} /><Twinkle color="#F2B600" size={9} /><Twinkle color="#1E9A8A" size={11} /></span></a>
+      <a href="#handmade" className={`rail-nav-link link-underline${page === 'handmade' ? ' is-current' : ''}`} onClick={goHandmade}>Handmade</a>
       <a href="#about" className={`rail-nav-link link-underline${page === 'about' ? ' is-current' : ''}`} onClick={goAbout}>About<span className="fx-smile" aria-hidden="true" /></a>
     </nav>
   );
@@ -467,11 +467,11 @@ const ARCHIVE_ITEMS = ARCHIVE_ROWS.flat()
 
 const hasDetail = (item) => !!(item.page || item.slug || item.desc || (item.links && item.links.length) || (item.assets && item.assets.length));
 
-function BentoTile({ item, onOpen }) {
+function BentoTile({ item, onOpen, plain }) {
   const open = hasDetail(item);
   return (
     <figure
-      className={`bento-tile${open ? ' is-link' : ''}`}
+      className={`bento-tile${open ? ' is-link' : ''}${plain ? ' is-plain' : ''}`}
       style={{ aspectRatio: item.a, background: item.matte }}
       onClick={open ? () => onOpen(item) : undefined}
       role={open ? 'button' : undefined}
@@ -488,10 +488,12 @@ function BentoTile({ item, onOpen }) {
         className={`bento-img${item.matte ? ' is-matte' : ''}`}
       />
       )}
+      {!plain && (
       <figcaption className="bento-label">
         <span className="bento-tag">{item.tag}</span>
         <span className="bento-title">{item.title}</span>
       </figcaption>
+      )}
     </figure>
   );
 }
@@ -644,12 +646,8 @@ const ABOUT_STORY = [
   "Listening is what I care about most, and it's personal. I know what it's like to be left out of a design that wasn't built with me in mind, so I make things that work for everyone, without anyone noticing the effort.",
 ];
 const PROFILE_IMG = '/assets/About/web/profile.jpg';
-// The top of About is a frameless, dotted, endless-feeling canvas, edge to edge under the top nav. The intro is two clean sticky
-// notes beside the photo; below them the pottery, drawings and baking are scattered in three labelled clusters. Drag the whole
-// canvas (mouse, trackpad or swipe) to look around. Each piece is titled like a file name. Visitors can take a rubber stamp from
-// the dock, choose which one, and press it next to a favorite; impressions are shared (src/stickers.js, api/stickers.js).
-// x is px from the middle of the canvas, y from its top (designed 1440 wide; --k scales it down on narrower screens).
-// `slug` is the piece's id for stamps; `f` is the photo in public/assets/About/web/.
+// ── About ──
+// Flower recipes shared by the About page (gallery blooms, the places map).
 const R = {
   pink: { solid: true, N: 5, petal: 0.4, cs: ['#D5287A', '#F7B2C4', '#fff'], coreColor: '#F2B600' },
   blue: { solid: true, N: 6, petal: 0.4, cs: ['#2D5BD6', '#A9C0FF', '#fff'], coreColor: '#F2B600' },
@@ -658,273 +656,123 @@ const R = {
   red: { solid: true, N: 6, petal: 0.4, cs: ['#E3000F', '#FF9A5A', '#fff'], coreColor: '#FFE066' },
   teal: { solid: true, N: 5, petal: 0.3, cs: ['#1E9A8A', '#A5E3DA', '#fff'], coreColor: '#D5287A' },
 };
-// The stamps a visitor can choose from (ids are also listed in api/stickers.js). Each leaves a one-color ink impression.
-const STAMPS = {
-  pink: { ink: '#D5287A', N: 5, petal: 0.4 }, blue: { ink: '#2D5BD6', N: 6, petal: 0.4 }, gold: { ink: '#E0A100', N: 8, petal: 0.35 },
-  green: { ink: '#00A86B', N: 4, petal: 0.5 }, red: { ink: '#E3000F', N: 6, petal: 0.4 }, teal: { ink: '#1E9A8A', N: 5, petal: 0.3 },
-  spark: { ink: '#1A1A18', N: 4, petal: 0.88 }, smile: { ink: '#1A1A18', text: ':)' },
-};
-// the printed mark: ink where the stamp is solid, paper (white, which multiplies away) in the inner bloom
-function Impression({ kind, size }) {
-  const k = STAMPS[kind];
-  if (!k) return null;
-  return k.text
-    ? <span className="st-smile" style={{ width: size, height: size, fontSize: size * 0.6, color: k.ink }}>{k.text}</span>
-    : <Glyph seed={1} recipe={{ solid: true, N: k.N, petal: k.petal, cs: [k.ink, '#fff', '#fff'], coreColor: k.ink }} open={0.95} size={size} />;
-}
-// the rubber stamp itself: knob, neck, plate and a face in the stamp's ink
-function StampTool({ kind, size }) {
-  const c = (STAMPS[kind] || STAMPS.pink).ink;
-  return (
-    <svg className="stamp-tool" width={size * 0.74} height={size} viewBox="0 0 44 60" aria-hidden="true">
-      <rect x="14" y="1" width="16" height="15" rx="7.5" fill="#1A1A18" />
-      <rect x="19" y="14" width="6" height="21" fill="#1A1A18" />
-      <rect x="4" y="33" width="36" height="9" fill="#1A1A18" />
-      <rect x="7" y="42" width="30" height="9" fill={c} />
-    </svg>
-  );
-}
-const CANVAS_INTRO = { profile: { x: -520, y: 150, w: 200, r: -3 }, one: { x: -310, y: 130, w: 470 }, two: { x: 190, y: 250, w: 290 } };
-const CANVAS_ITEMS = [
-  { label: 'pottery/', x: -850, y: 690 },
-  { slug: 'nesting-bowls', f: 'pottery1', title: 'nesting-bowls.jpg', w: 200, x: -850, y: 740, r: -3, pin: '#F2B600' },
-  { slug: 'bowls-on-butter', f: 'pottery2', title: 'bowls-on-butter.jpg', w: 190, x: -610, y: 715, r: 2, pin: '#2D5BD6' },
-  { slug: 'cups-after-dark', f: 'pottery3', title: 'cups-after-dark.jpg', w: 200, x: -780, y: 1010, r: 2, pin: '#1E9A8A' },
-  { slug: 'celadon-cup', f: 'pottery4', title: 'celadon-cup.jpg', w: 180, x: -540, y: 985, r: -3, pin: '#00A86B' },
-  { label: 'drawing/', x: -270, y: 690 },
-  { slug: 'still-life-with-guitar', f: 'drawing1', title: 'still-life-with-guitar.jpg', w: 200, x: -270, y: 740, r: 2, pin: '#E3000F' },
-  { slug: 'living-room-charcoal', f: 'drawing2', title: 'living-room-charcoal.jpg', w: 270, x: -10, y: 705, r: -2, pin: '#4B2E83' },
-  { slug: 'arms-crossed-pastel', f: 'drawing3', title: 'arms-crossed-pastel.jpg', w: 190, x: -240, y: 1020, r: -2, pin: '#D5287A' },
-  { slug: 'slate-portrait', f: 'drawing4', title: 'slate-portrait.png', w: 190, x: 40, y: 985, r: 3, pin: '#F2B600' },
-  { slug: 'red-portrait', f: 'drawing5', title: 'red-portrait.png', w: 190, x: 300, y: 1015, r: -2, pin: '#E3000F' },
-  { label: 'baking/', x: 520, y: 690 },
-  { slug: 'laminated-loaf', f: 'baking1', title: 'laminated-loaf.jpg', w: 200, x: 520, y: 740, r: 2, pin: '#2D5BD6' },
-  { slug: 'matcha-swirl', f: 'baking2', title: 'matcha-swirl.jpg', w: 240, x: 760, y: 705, r: -2, pin: '#00A86B' },
-  { slug: 'holiday-cookies', f: 'baking3', title: 'holiday-cookies.jpg', w: 210, x: 540, y: 995, r: -2, pin: '#F2B600' },
-  { slug: 'croissant-batch', f: 'baking4', title: 'croissant-batch.jpg', w: 190, x: 790, y: 975, r: 3, pin: '#E3000F' },
-];
-const CANVAS_FLOWERS = [
-  { x: -400, y: 640, size: 46, r: 12, recipe: R.pink }, { x: 250, y: 610, size: 42, r: -10, recipe: R.gold },
-  { x: 700, y: 620, size: 50, r: 8, recipe: R.teal }, { x: -940, y: 960, size: 44, r: -8, recipe: R.green },
-  { x: 480, y: 1250, size: 52, r: 6, recipe: R.blue }, { x: -300, y: 1280, size: 46, r: -12, recipe: R.red },
-];
-const px = (n) => `calc(${n} * var(--k) * 1px)`;
-const cx = (n) => `calc(50% + ${n} * var(--k) * 1px)`;   // x is measured from the middle of the canvas
-const clamp01 = (v, a = 0.04, b = 0.96) => Math.min(b, Math.max(a, v));
 
-function AboutCanvas() {
-  const root = useRef(null), world = useRef(null), ghost = useRef(null);
-  const pan = useRef({ x: 0, y: 0, k: 1, moved: false });
-  const [stickers, setStickers] = useState(null);   // everyone's stamps; null when there is no server (the dock hides)
-  const [armed, setArmed] = useState(null);         // the stamp in hand
-  const [last, setLast] = useState('pink');         // the stamp chosen most recently
-  const [picker, setPicker] = useState(false);      // the stamp palette is open
-  const [seen, setSeen] = useState(false);          // the first-visit hint has done its job
-  const [moved, setMoved] = useState(false);        // the canvas has been moved at least once (hides the drag hint)
-  const [used, setUsed] = useState(usedCount());
-  const left = STICKER_LIMIT - used;
-  useEffect(() => { let on = true; loadStickers().then((r) => { if (on) setStickers(r); }); return () => { on = false; }; }, []);
-  // the canvas is designed 1440 wide; below that it scales down together. The mobile layout is a plain stack (no panning).
-  const apply = () => {
-    const { x, y } = pan.current, el = root.current;
-    if (!el) return;
-    world.current.style.translate = `${x}px ${y}px`;
-    el.style.setProperty('--ox', `${x}px`); el.style.setProperty('--oy', `${y}px`);
+// The signature moment: the opening animation's glyphs, breathing in color behind the intro, full-bleed under the top nav. The intro
+// sits on a feathered square layered over them. Move through the field and the glyphs under the cursor open up, each with a small
+// chime, like the opening animation (sound waits for the first click or key press).
+function HeroField({ children }) {
+  const lit = useRef(new Map()), lastNote = useRef(0);
+  const [touched, setTouched] = useState(false);
+  const bFn = (i, j, cols, rows, t, m, cx, cy) => {
+    const base = 0.2 + 0.5 * breathe(i, j, cols, rows, t * 0.8);
+    const d = Math.hypot(cx - m.x, cy - m.y), bloom = Math.exp(-(d * d) / (2 * 130 * 130));
+    const key = i * 512 + j, was = lit.current.get(key) || false;
+    if (bloom > 0.55 && !was) {
+      lit.current.set(key, true);
+      const now = performance.now();
+      if (now - lastNote.current > 90) { lastNote.current = now; play('chime', i * 3 + j * 5); setTouched(true); }
+    } else if (bloom < 0.2 && was) lit.current.set(key, false);
+    return Math.min(0.97, base + bloom * 0.6);
   };
-  useEffect(() => {
-    const fit = () => {
-      const k = Math.min(1, Math.max(0.7, window.innerWidth / 1440));
-      pan.current.k = k; root.current.style.setProperty('--k', k.toFixed(3));
-      if (window.innerWidth <= 860) { pan.current.x = 0; pan.current.y = 0; }
-      apply();
-    };
-    fit(); window.addEventListener('resize', fit);
-    return () => window.removeEventListener('resize', fit);
-  }, []);
-  const moveBy = (dx, dy) => {
-    const p = pan.current, k = p.k;
-    p.x = Math.max(-640 * k, Math.min(640 * k, p.x + dx));
-    p.y = Math.max(-440 * k, Math.min(110, p.y + dy));
-    if (!p.moved) { p.moved = true; setMoved(true); }
-    apply();
-  };
-  // a trackpad's sideways swipe pans too
-  useEffect(() => {
-    const el = root.current;
-    const wheel = (e) => {
-      if (window.innerWidth <= 860 || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
-      e.preventDefault(); moveBy(-e.deltaX, 0);
-    };
-    el.addEventListener('wheel', wheel, { passive: false });
-    return () => el.removeEventListener('wheel', wheel);
-  }, []);
-  // the stamp in hand follows the pointer; Esc puts it down
-  useEffect(() => {
-    if (!armed) return;
-    const g = ghost.current;
-    const move = (e) => {
-      const t = e.target.closest ? e.target : null;
-      g.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
-      g.style.opacity = t && t.closest('.ac-dock') ? 0 : t && t.closest('.is-votable') ? 1 : 0.5;
-    };
-    const key = (e) => { if (e.key === 'Escape') { setArmed(null); setPicker(false); } };
-    window.addEventListener('pointermove', move); window.addEventListener('keydown', key);
-    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('keydown', key); };
-  }, [armed]);
-  // drag anywhere on the canvas to move it (touch drags sideways only; vertical swipes still scroll the page)
-  const down = (e) => {
-    if (e.button !== 0 || window.innerWidth <= 860 || (e.target.closest && e.target.closest('.ac-dock'))) return;
-    const p = pan.current, touch = e.pointerType === 'touch';
-    let lx = e.clientX, ly = e.clientY, drag = false;
-    p.moved = false;
-    const move = (ev) => {
-      const dx = ev.clientX - lx, dy = ev.clientY - ly;
-      if (!drag && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) > 4) { drag = true; p.dragging = true; root.current.classList.add('is-drag'); }
-      if (!drag) return;
-      lx = ev.clientX; ly = ev.clientY;
-      moveBy(dx, touch ? 0 : dy);
-    };
-    const up = () => {
-      root.current && root.current.classList.remove('is-drag');
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
-      setTimeout(() => { p.dragging = false; }, 0);   // after the click that follows a drag has been ignored
-    };
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
-  };
-  const place = (e, it) => {
-    if (pan.current.dragging || !armed || left <= 0) return;
-    const el = e.currentTarget, r = el.getBoundingClientRect(), a = (-it.r * Math.PI) / 180;
-    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);   // undo the tilt to find the spot on the piece
-    const x = clamp01((dx * Math.cos(a) - dy * Math.sin(a) + el.offsetWidth / 2) / el.offsetWidth);
-    const y = clamp01((dx * Math.sin(a) + dy * Math.cos(a) + el.offsetHeight / 2) / el.offsetHeight);
-    const st = { p: it.slug, s: armed, x: +x.toFixed(3), y: +y.toFixed(3), r: Math.round(Math.random() * 40 - 20) };
-    ghost.current.classList.add('is-press'); setTimeout(() => ghost.current && ghost.current.classList.remove('is-press'), 200);
-    setStickers((l) => [...(l || []), st]);
-    setUsed((n) => n + 1);
-    setPicker(false);
-    if (left <= 1) setArmed(null);
-    placeSticker(st).catch(() => setStickers((l) => (l || []).filter((v) => v !== st)));
-  };
-  const I = CANVAS_INTRO;
+  const sFn = (i, j, cols, rows, t, m, cx, cy) => 0.78 + 0.22 * Math.exp(-(Math.hypot(cx - m.x, cy - m.y) ** 2) / (2 * 160 * 160));
   return (
-    <section className={`ac${armed ? ' is-armed' : ''}`} ref={root} onPointerDown={down} aria-label="About">
-      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
-        <filter id="ink-rough" x="-10%" y="-10%" width="120%" height="120%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="4" result="n" />
-          <feDisplacementMap in="SourceGraphic" in2="n" scale="2" />
-        </filter>
-      </svg>
-      <div className="ac-world" ref={world}>
-        <figure className="ac-item ac-photo is-static" style={{ left: cx(I.profile.x), top: px(I.profile.y), width: px(I.profile.w), rotate: `${I.profile.r}deg`, '--pin': '#D5287A' }}>
-          <img src="/assets/About/web/profile.jpg" alt="Jayden Kang" draggable="false" />
-          <figcaption><span className="ac-title">jayden-kang.jpg</span></figcaption>
-          <i className="b-pin" style={{ background: '#D5287A' }} />
-        </figure>
-        <div className="ac-item ac-sticky" style={{ left: cx(I.one.x), top: px(I.one.y), width: px(I.one.w), '--tint': '#FFF2CC' }}>
-          <span className="ac-sticky-tag">hello.txt</span>
-          <h1 className="about-name">Hey, I'm Jayden!</h1>
-          <span className="about-tagline">Product Designer · Inclusive UX · Systems Thinking</span>
-          {ABOUT_STORY.slice(0, 2).map((text, i) => <p className="about-bio" key={i}>{text}</p>)}
-        </div>
-        <div className="ac-item ac-sticky" style={{ left: cx(I.two.x), top: px(I.two.y), width: px(I.two.w), '--tint': '#DDF1E6' }}>
-          <span className="ac-sticky-tag">listening.txt</span>
-          <p className="about-bio">{ABOUT_STORY[2]}</p>
-        </div>
-        {CANVAS_ITEMS.map((it) => it.label ? (
-          <span className="ac-item ac-label" key={it.label} style={{ left: cx(it.x), top: px(it.y) }}>{it.label}</span>
-        ) : (
-          <figure className={`ac-item ac-photo${stickers ? ' is-votable' : ''}`} key={it.slug} onClick={(e) => place(e, it)}
-            style={{ left: cx(it.x), top: px(it.y), width: px(it.w), rotate: `${it.r}deg`, '--pin': it.pin }}>
-            <img src={`/assets/About/web/${it.f}.jpg`} alt="" loading="lazy" draggable="false" />
-            <figcaption><span className="ac-title">{it.title}</span></figcaption>
-            <i className="b-pin" style={{ background: it.pin }} />
-            {(stickers || []).filter((s) => s.p === it.slug).slice(-12).map((s, k) => (
-              <span className="ac-stk" key={k} style={{ left: `${s.x * 100}%`, top: `${s.y * 100}%`, rotate: `${s.r}deg` }}><Impression kind={s.s} size={38} /></span>
-            ))}
-          </figure>
-        ))}
-        {CANVAS_FLOWERS.map((st, i) => (
-          <span className="ac-item ac-flower" key={i} style={{ left: cx(st.x), top: px(st.y), rotate: `${st.r}deg` }}><Glyph seed={1} recipe={st.recipe} open={0.95} size={st.size} /></span>
-        ))}
-      </div>
-      {!moved && <span className="ac-hint" aria-hidden="true">Drag the canvas</span>}
-      {stickers && (
-        <div className="ac-dock" role="toolbar" aria-label="Stamp">
-          {picker && (
-            <div className="ac-stamps" role="group" aria-label="Choose a stamp">
-              {Object.keys(STAMPS).map((k) => (
-                <button type="button" key={k} className={armed === k ? 'is-on' : ''} aria-label={`${k} stamp`} onClick={() => { setArmed(k); setLast(k); setPicker(false); }}>
-                  <Impression kind={k} size={30} />
-                </button>
-              ))}
-            </div>
-          )}
-          {!seen && left > 0 && !armed && <span className="ac-dock-tip">Stamp your favorites</span>}
-          <button type="button" className={`ac-stamp-btn${armed ? ' is-on' : ''}`} disabled={left <= 0} aria-pressed={!!armed} title={left <= 0 ? 'Out of stamps, thank you!' : 'Stamp'}
-            onClick={() => { setSeen(true); if (armed) { setArmed(null); setPicker(false); } else { setArmed(last); setPicker(true); } }}>
-            <StampTool kind={armed || last} size={30} />
-            <span>Stamp</span>
-            {left > 0 && <b>{left}</b>}
-          </button>
-        </div>
-      )}
-      <div className="ac-ghost" ref={ghost} aria-hidden="true">{armed && <StampTool kind={armed} size={52} />}</div>
-    </section>
+    <div className="heroband">
+      <ParamField className="heroband-canvas" cell={FIELD_CELL} alpha={0.5} bFn={bFn} sFn={sFn} reactive local fps={30} />
+      {children}
+      <span className={`heroband-hint${touched ? ' is-gone' : ''}`} aria-hidden="true">Move through it</span>
+    </div>
   );
 }
 
-// Places: where I have lived, on a world map (src/worldMap.js, generated by scripts/gen-world.mjs). The flowers bloom one
-// after another as the map scrolls into view; hover one to see the place.
+// The Handmade page (#/handmade): the same bento masonry as Tinkering, without links or hover text. Pottery first. Photos from
+// public/assets/Studio/ (from the @jaydensarkive archive) and public/assets/About/web/. `a` is width / height.
+const STUDIO = [
+  { src: '/assets/Studio/lilac-and-rose-bowls.jpg', a: 1, title: 'Lilac and Rose Bowls', tag: 'Pottery' },
+  { src: '/assets/About/web/pottery4.jpg', a: 1171 / 1200, title: 'Celadon Cup', tag: 'Pottery' },
+  { src: '/assets/Studio/rose-pouring-bowl.jpg', a: 528 / 640, title: 'Rose Pouring Bowl', tag: 'Pottery' },
+  { src: '/assets/About/web/pottery1.jpg', a: 1200 / 1197, title: 'Nesting Bowls', tag: 'Pottery' },
+  { src: '/assets/Studio/round-vase-lavender.jpg', a: 1, title: 'Round Vase in Lavender', tag: 'Pottery' },
+  { src: '/assets/Studio/lilac-bowl-carved.jpg', a: 480 / 640, title: 'Carved Lilac Bowl', tag: 'Pottery' },
+  { src: '/assets/About/web/pottery3.jpg', a: 1, title: 'Cups After Dark', tag: 'Pottery' },
+  { src: '/assets/Studio/stacked-vases-shadow.jpg', a: 639 / 640, title: 'Stacked Vases', tag: 'Pottery' },
+  { src: '/assets/About/web/pottery2.jpg', a: 1200 / 1197, title: 'Bowls on Butter', tag: 'Pottery' },
+  { src: '/assets/Studio/two-cups-closeup.jpg', a: 639 / 640, title: 'Two Cups, Up Close', tag: 'Pottery' },
+  { src: '/assets/Studio/mug-on-deck.jpg', a: 1, title: 'Mug on the Deck', tag: 'Pottery' },
+  { src: '/assets/Studio/cream-glaze-closeup.jpg', a: 639 / 640, title: 'Cream Glaze', tag: 'Pottery' },
+  { src: '/assets/Studio/greenware-lineup.jpg', a: 1, title: 'Greenware Lineup', tag: 'Pottery' },
+  { src: '/assets/About/web/drawing1.jpg', a: 1, title: 'Still Life with Guitar', tag: 'Drawing' },
+  { src: '/assets/About/web/drawing5.jpg', a: 800 / 782, title: 'Red Portrait', tag: 'Drawing' },
+  { src: '/assets/About/web/drawing2.jpg', a: 800 / 591, title: 'Living Room, Charcoal', tag: 'Drawing' },
+  { src: '/assets/About/web/drawing4.jpg', a: 1, title: 'Slate Portrait', tag: 'Drawing' },
+  { src: '/assets/About/web/drawing3.jpg', a: 800 / 794, title: 'Arms Crossed, Pastel', tag: 'Drawing' },
+  { src: '/assets/About/web/baking2.jpg', a: 1200 / 957, title: 'Matcha Swirl', tag: 'Baking' },
+  { src: '/assets/About/web/baking1.jpg', a: 1190 / 1200, title: 'Laminated Loaf', tag: 'Baking' },
+  { src: '/assets/About/web/baking4.jpg', a: 1141 / 1200, title: 'Croissant Batch', tag: 'Baking' },
+  { src: '/assets/About/web/baking3.jpg', a: 1200 / 1047, title: 'Holiday Cookies', tag: 'Baking' },
+];
+function StudioGrid() {
+  const [cols, setCols] = useState(() => Math.min(3, archiveCols(window.innerWidth)));
+  useEffect(() => {
+    const onResize = () => setCols(Math.min(3, archiveCols(window.innerWidth)));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const columns = Array.from({ length: cols }, () => []);
+  const heights = Array(cols).fill(0);
+  STUDIO.forEach((item) => {
+    const c = heights.indexOf(Math.min(...heights));
+    columns[c].push(item);
+    heights[c] += 1 / item.a;
+  });
+  return (
+    <div className="bento">
+      {columns.map((col, i) => (
+        <div key={i} className="bento-col">{col.map((item) => <BentoTile key={item.src} item={item} plain />)}</div>
+      ))}
+    </div>
+  );
+}
+// Places I've been: an abstract world map (src/worldMap.js, generated by scripts/gen-world.mjs) with every pin at its true spot. Hover a
+// pin, or a name under the map, and that place's photo opens beside the pin.
 const PLACES = [
-  { key: 'portland', city: 'Portland', region: 'Oregon', role: 'Born', fx: -22, fy: 0 },
-  { key: 'seoul', city: 'Seoul', region: 'South Korea', role: 'Grew up', fx: 0, fy: 0 },
-  { key: 'la', city: 'Los Angeles', region: 'California', role: 'USC · undergrad', fx: -2, fy: 10 },
-  { key: 'london', city: 'London', region: 'England', role: 'Study abroad', fx: 0, fy: 0 },
-  { key: 'seattle', city: 'Seattle', region: 'Washington', role: 'UW · grad school', now: true, fx: 14, fy: -24 },
+  { key: 'portland', city: 'Portland', region: 'Oregon', role: 'Born' },
+  { key: 'seoul', city: 'Seoul', region: 'South Korea', role: 'Grew up', photo: '/assets/Places/seoul.jpg' },
+  { key: 'la', city: 'Los Angeles', region: 'California', role: 'USC · undergrad', photo: '/assets/Intro/usc.jpg' },
+  { key: 'london', city: 'London', region: 'England', role: 'Study abroad', photo: '/assets/Places/london.jpg' },
+  { key: 'sf', city: 'San Francisco', region: 'California', role: 'Adobe internship', photo: '/assets/Intro/adobe.jpg' },
+  { key: 'seattle', city: 'Seattle', region: 'Washington', role: 'UW · grad school', now: true, photo: '/assets/Intro/uw.jpg' },
 ];
-const PLACE_FLOWERS = { portland: R.pink, seoul: R.blue, la: R.gold, london: R.red, seattle: { solid: true, N: 5, petal: 0.4, cs: ['#4B2E83', '#B9A3F0', '#fff'], coreColor: '#E0C97A' } };
-// the map is cropped to the part with people on it (no Antarctica, little Arctic)
-const MAP_Y0 = 52, MAP_H = 340;
+const PLACE_FLOWERS = { portland: R.pink, seoul: R.blue, la: BRAND_GLYPH.USC, london: R.teal, sf: BRAND_GLYPH.Adobe, seattle: BRAND_GLYPH.UW };
 function Places() {
-  const ref = useRef(null);
-  const [shown, setShown] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let timer = 0;
-    const io = new IntersectionObserver(([e]) => {
-      if (!e.isIntersecting) return;
-      io.disconnect();
-      let n = 0;
-      timer = setInterval(() => { n += 1; setShown(n); if (n >= PLACES.length) clearInterval(timer); }, 450);
-    }, { threshold: 0.35 });
-    io.observe(el);
-    return () => { io.disconnect(); clearInterval(timer); };
-  }, []);
+  const [active, setActive] = useState(null);
+  const on = (k) => ({ onMouseEnter: () => setActive(k), onMouseLeave: () => setActive(null), onFocus: () => setActive(k), onBlur: () => setActive(null) });
   return (
     <div className="places">
-      <div className="map" ref={ref} style={{ aspectRatio: `${MAP.W} / ${MAP_H}` }}>
-        <svg viewBox={`0 ${MAP_Y0} ${MAP.W} ${MAP_H}`} className="map-svg" role="img" aria-label="World map: Portland, Seoul, Los Angeles, London, Seattle">
-          <path d={MAP.dots} className="map-land" />
+      <div className="map-box" style={{ aspectRatio: `${MAP.W} / ${MAP.h}` }}>
+        <svg viewBox={`0 ${MAP.y0} ${MAP.W} ${MAP.h}`} className="map-svg" role="img" aria-label="World map of the places listed under it">
+          <path d={MAP.land} className="map-land" />
         </svg>
-        {PLACES.map((p, i) => {
-          const [x, y] = MAP.pts[p.key];
+        {PLACES.map((p) => {
+          const [x, y] = MAP.pts[p.key], left = (x / MAP.W) * 100, flip = left > 60;
           return (
-            <div className="map-stop" key={p.key} style={{ left: `${(x / MAP.W) * 100}%`, top: `${((y - MAP_Y0) / MAP_H) * 100}%` }}>
-              <span className="map-flower" style={{ translate: `${p.fx}px ${p.fy}px` }}>
-                <Glyph seed={1} recipe={PLACE_FLOWERS[p.key]} open={0.92} hover={i < shown} size={34} />
-                <span className="map-label">
-                  <b>{p.city}</b>
-                  <span>{p.role}{p.now && <em>Now</em>}</span>
-                </span>
-              </span>
+            <div key={p.key} className={`map-pin${active === p.key ? ' is-on' : ''}${flip ? ' is-flip' : ''}`} style={{ left: `${left}%`, top: `${((y - MAP.y0) / MAP.h) * 100}%` }}>
+              <button type="button" className="map-dot" aria-label={p.city} {...on(p.key)} />
+              <span className="map-bloom"><Glyph seed={1} recipe={PLACE_FLOWERS[p.key]} open={0.92} hover={active === p.key} size={30} /></span>
+              <figure className="map-peek" aria-hidden="true">
+                <div className="map-peek-img">
+                  {p.photo ? <img src={p.photo} alt="" draggable="false" /> : <span className="map-peek-flower"><Glyph seed={1} recipe={PLACE_FLOWERS[p.key]} open={0.92} hover={active === p.key} size={64} /></span>}
+                </div>
+                <figcaption><b>{p.city}</b><span>{p.role}</span></figcaption>
+              </figure>
             </div>
           );
         })}
       </div>
-      <ol className="places-list">
-        {PLACES.map((p) => <li key={p.key}><b>{p.city}</b>, {p.region}<span>{p.role}</span></li>)}
-      </ol>
+      <ul className="place-names">
+        {PLACES.map((p) => (
+          <li key={p.key}><button type="button" className={active === p.key ? 'is-on' : ''} {...on(p.key)}>{p.city}{p.now && <em>Now</em>}</button></li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1020,14 +868,66 @@ const avoidFactor = (cx, cy) => {
 };
 const bgBloom = (m, cx, cy) => { const d = Math.hypot(cx - m.x, cy - m.y); return Math.exp(-(d * d) / (2 * 90 * 90)); };
 // desaturated at rest; color comes back where the cursor is
-const bgSat = (i, j, cols, rows, t, m, cx, cy) => 0.08 + 0.92 * bgBloom(m, cx, cy);
+// Poking the empty background wakes the field up: a click sends a ripple of blooms across it and lifts its color for a few seconds,
+// and resting on empty background for 3 seconds does too. The color rises to about 80% at the centre of the bloom and fades out with
+// distance (not at the rim). Both ease back.
+const BG_CONTENT = 'a,button,input,textarea,select,label,p,h1,h2,h3,h4,li,blockquote,figure,img,video,svg:not(.field-canvas),.card,.kind,.glyph-band,.site-footer,.rail-nav,.sound-toggle,.peek,[data-peek],.map,.places';
+const onBg = (el) => !(el && el.closest && el.closest(BG_CONTENT));
+const bgFx = { boost: 0, since: 0, ripples: [] };
+const bgFxStep = () => {
+  const now = performance.now();
+  const target = bgFx.since && now - bgFx.since > 3000 ? 1 : 0;   // resting on empty background for 3s (strength follows the pointer)
+  bgFx.boost += (target - bgFx.boost) * (target > bgFx.boost ? 0.07 : 0.025);
+  if (bgFx.ripples.length && now - bgFx.ripples[0].at > 3600) bgFx.ripples.shift();
+};
+const bgPre = () => { updateAvoid(); bgFxStep(); };
+// Where the background was clicked (or where the pointer has rested for 3s) the color rises to about 80% at the centre and fades out
+// with distance, so the saturated part is the middle of the bloom, not its expanding rim.
+const bgFocus = (t, m, cx, cy) => {
+  let f = 0;
+  for (const r of bgFx.ripples) {
+    const age = t - r.t;
+    if (age < 0 || age > 3.4) continue;
+    const dx = cx - r.x, dy = cy - r.y;
+    f += Math.min(1, age / 0.2) * (1 - age / 3.4) * Math.exp(-(dx * dx + dy * dy) / (2 * 260 * 260));
+  }
+  if (bgFx.boost > 0.01) { const dx = cx - m.x, dy = cy - m.y; f += bgFx.boost * Math.exp(-(dx * dx + dy * dy) / (2 * 260 * 260)); }
+  return Math.min(1, f);
+};
+const bgSat = (i, j, cols, rows, t, m, cx, cy) => Math.min(1, 0.08 + 0.92 * bgBloom(m, cx, cy) + 0.72 * bgFocus(t, m, cx, cy));
+const bgAlphaMul = (i, j, cols, rows, t, m, cx, cy) => 1 + 0.7 * bgFocus(t, m, cx, cy);
 const bgField = (i, j, cols, rows, t, m, cx, cy) => {
   const base = 0.03 + 0.2 * breathe(i, j, cols, rows, t * 0.6);
-  return Math.min(0.9, base + bgBloom(m, cx, cy) * 0.6) * avoidFactor(cx, cy);
+  let rip = 0;
+  for (const r of bgFx.ripples) {   // a ring of bloom travelling out from where the background was clicked
+    const age = t - r.t;
+    if (age < 0 || age > 2) continue;
+    const d = Math.hypot(cx - r.x, cy - r.y) - age * 620;
+    rip += 0.55 * Math.exp(-(d * d) / (2 * 70 * 70)) * (1 - age / 2);
+  }
+  return Math.min(0.9, base + bgBloom(m, cx, cy) * 0.6 + rip) * avoidFactor(cx, cy);
 };
 function BackgroundField({ quiet }) {
+  useEffect(() => {
+    let down = null;
+    const pd = (e) => { down = { x: e.clientX, y: e.clientY, at: performance.now(), bg: onBg(e.target) }; };
+    const pu = (e) => {
+      const d = down; down = null;
+      if (!d || !d.bg || !onBg(e.target) || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6 || performance.now() - d.at > 500) return;   // a click, not a drag
+      bgFx.ripples.push({ x: e.clientX, y: e.clientY, t: fieldTime(), at: performance.now() });
+    };
+    const pm = (e) => { if (onBg(e.target)) { if (!bgFx.since) bgFx.since = performance.now(); } else bgFx.since = 0; };
+    const leave = () => { bgFx.since = 0; };
+    window.addEventListener('pointerdown', pd); window.addEventListener('pointerup', pu); window.addEventListener('pointermove', pm, { passive: true });
+    document.documentElement.addEventListener('mouseleave', leave);
+    return () => {
+      window.removeEventListener('pointerdown', pd); window.removeEventListener('pointerup', pu); window.removeEventListener('pointermove', pm);
+      document.documentElement.removeEventListener('mouseleave', leave);
+      bgFx.boost = 0; bgFx.since = 0; bgFx.ripples.length = 0;
+    };
+  }, []);
   // quieter on pages with long copy so the glyphs never compete with reading
-  return <ParamField className="field-canvas" cell={FIELD_CELL} alpha={bgAlpha(quiet)} bFn={bgField} sFn={bgSat} pre={updateAvoid} reactive fps={30} />;
+  return <ParamField className="field-canvas" cell={FIELD_CELL} alpha={bgAlpha(quiet)} aFn={bgAlphaMul} bFn={bgField} sFn={bgSat} pre={bgPre} reactive fps={30} />;
 }
 
 
@@ -1048,6 +948,7 @@ function parseHash(hash) {
     return { page: 'archive', caseIdx: 0, modal: b || null };
   }
   if (a === 'about') return { page: 'about', caseIdx: 0, modal: null };
+  if (a === 'handmade' || a === 'hobbies' || a === 'outside') return { page: 'handmade', caseIdx: 0, modal: null };
   if (a === 'lab' && import.meta.env.DEV) return { page: 'lab', caseIdx: 0, modal: null };
   return { page: 'home', caseIdx: 0, modal: null };
 }
@@ -1137,7 +1038,7 @@ function SoundToggle() {
 
 // Which elements get which sound. Delegated from the document so the individual components stay untouched.
 const HOVER_SOUND = '[data-peek], .card, .rail-nav-link, .ad-close, .sound-toggle';
-const NAV_SOUND = { '#work-0': 'navWork', '#experimentation': 'navTinker', '#about': 'navAbout' };
+const NAV_SOUND = { '#work-0': 'navWork', '#experimentation': 'navTinker', '#handmade': 'navAbout', '#about': 'navAbout' };
 const CLICK_SOUND = 'a, button, [role="button"], .card, .bento-tile.is-link';
 
 const nav = (hash) => { if (window.location.hash !== hash) window.location.hash = hash; };
@@ -1221,10 +1122,11 @@ export default function Portfolio() {
 
   const goArchive = (e) => { e.preventDefault(); nav('#/experimentation'); if (page === 'archive') window.scrollTo(0, 0); };
   const goAbout = (e) => { e.preventDefault(); nav('#/about'); };
+  const goHandmade = (e) => { e.preventDefault(); nav('#/handmade'); };
   const goArchiveCase = (key) => nav(key === 'archive' ? '#/experimentation' : '#/experimentation/' + ARCHIVE_PAGES[key]);
   const goCase = (idx) => nav('#/work/' + WORK_SLUGS[idx]);
 
-  const quietBg = page === 'about' || page === 'case' || ARCHIVE_PAGE_KEYS.includes(page);
+  const quietBg = page === 'about' || page === 'handmade' || page === 'case' || ARCHIVE_PAGE_KEYS.includes(page);
 
   return (
     <>
@@ -1426,6 +1328,7 @@ export default function Portfolio() {
         .bento-img.is-matte{width:auto;height:auto;max-width:86%;max-height:86%}
         .bento-tile::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.5);opacity:0;transition:opacity .3s ease;pointer-events:none}
         .bento-tile:hover::after{opacity:1}
+        .bento-tile.is-plain::after{display:none}
         .bento-tile.is-link{cursor:pointer}
         .bento-nda{position:absolute;inset:0;background:#1A1A18;display:flex;align-items:center;justify-content:center}
         .bento-nda span{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(245,242,238,.5)}
@@ -1435,7 +1338,7 @@ export default function Portfolio() {
         .bento-title{font-size:14px;font-weight:600;letter-spacing:-.01em}
 
         /* ── About: clean and calm, same width as the Work page ── */
-        .about-page{max-width:1160px;margin:0 auto;padding:72px 60px 96px;display:flex;flex-direction:column;gap:64px}
+        .about-page{max-width:1160px;margin:0 auto;padding:var(--top) 60px 96px;display:flex;flex-direction:column;gap:64px}
         .wf-block{background:rgba(26,26,24,.06);border:1px solid var(--border)}
         .wf-divider{height:1px;background:var(--border)}
 
@@ -1462,7 +1365,7 @@ export default function Portfolio() {
         .ad-video{position:relative;width:100%;aspect-ratio:16/9;background:#000}
         .ad-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
         @media (max-width:860px){.ad-dialog{padding:24px 20px 28px}}
-        .about-sec{display:grid;grid-template-columns:200px minmax(0,1fr);gap:64px;border-top:1px solid #1A1A18;padding-top:24px}
+        .about-sec{display:grid;grid-template-columns:200px minmax(0,1fr);gap:64px}
         .kind-list{display:flex;flex-direction:column;gap:40px}
         .kind blockquote{font-size:16px;line-height:1.7;color:var(--text)}
         .kind-band{position:relative;z-index:1;margin-top:80px;background:#EDE8E0;border-top:1px solid rgba(26,26,24,.1);scroll-snap-align:start;scroll-margin-top:0}
@@ -1488,77 +1391,63 @@ export default function Portfolio() {
         @media (min-width:1900px){.kind-sec{max-width:1560px;grid-template-columns:360px 1fr;gap:96px}}
         .kind figcaption{margin-top:14px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.04em;color:var(--text-dim);display:flex;gap:10px;flex-wrap:wrap}
         .kind figcaption strong{color:var(--text);font-weight:500}
-        /* About canvas: no frame, edge to edge under the nav. One big surface: drag it to look around. */
-        .ac{--k:1;--ox:0px;--oy:0px;position:relative;display:flex;flex-direction:column;height:1040px;overflow:clip;cursor:grab;border-bottom:1px solid #1A1A18;touch-action:pan-y;
-          background-image:radial-gradient(rgba(26,26,24,.2) 1.1px,transparent 1.5px);background-size:26px 26px;background-position:var(--ox) var(--oy)}
-        .ac{user-select:none;-webkit-user-select:none}
-        .ac.is-drag{cursor:grabbing}
-        .ac-world{position:absolute;left:0;top:0;width:100%;height:100%;translate:0 0}
-        .ac-item{position:absolute;margin:0}
-        /* clean, modern stickies: flat tint, no tape or tilt, a mono file-name tag */
-        .ac-sticky{display:flex;flex-direction:column;gap:12px;padding:26px 30px 30px;background:var(--tint);border:1px solid rgba(26,26,24,.09)}
-        .ac-sticky-tag{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;color:rgba(26,26,24,.5)}
-        .ac-sticky .about-name{font-size:30px}
-        .ac-sticky .about-tagline{color:rgba(26,26,24,.55)}
-        .ac-sticky .about-bio{font-size:14.5px;line-height:1.65;color:#2A2A26}
-        .ac-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;color:var(--text-dim)}
-        .ac-flower{line-height:0}
-        .ac-photo{background:#fff;padding:7px 7px 8px;border:1px solid rgba(26,26,24,.12);transition:scale .3s cubic-bezier(.3,1.4,.5,1)}
-        .ac-photo:hover{scale:1.03;z-index:20}
-        .ac-photo img{display:block;width:100%;height:auto;-webkit-user-drag:none}
-        .ac-photo figcaption{padding-top:8px}
-        .ac-title{display:block;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.02em;color:var(--text-mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .ac-hint{position:absolute;left:24px;bottom:30px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);pointer-events:none}
-        .b-pin{position:absolute;left:50%;top:-7px;width:13px;height:13px;border-radius:50%;translate:-50% 0;box-shadow:inset -2px -2px 0 rgba(0,0,0,.18)}
-        /* ink impressions: one-color prints that sink into the photo */
-        .ac-stk{position:absolute;translate:-50% -50%;line-height:0;pointer-events:none;mix-blend-mode:multiply;opacity:.9;filter:url(#ink-rough);animation:inkIn .35s cubic-bezier(.2,.9,.3,1) both}
-        @keyframes inkIn{from{scale:1.3;opacity:0}to{scale:1;opacity:.9}}
-        @keyframes stkIn{from{scale:.3;opacity:0}to{scale:1;opacity:1}}
-        .st-smile{display:inline-flex;align-items:center;justify-content:center;rotate:90deg;font-family:'DM Mono',monospace;font-weight:500;letter-spacing:.05em;line-height:1}
-        .ac.is-armed,.ac.is-armed .ac-photo.is-votable{cursor:none}
-        .ac.is-armed .ac-photo.is-votable{outline:1.5px dashed rgba(26,26,24,.35);outline-offset:3px}
-        .ac.is-armed .ac-photo.is-votable:hover{outline-color:var(--pin);scale:1}
-        .ac-dock{position:sticky;bottom:22px;margin:auto auto 0;z-index:60;display:flex;align-items:center;padding:5px;background:#fff;border:1px solid #1A1A18;cursor:default}
-        .ac-stamp-btn{position:relative;display:flex;align-items:center;gap:10px;height:48px;padding:0 14px 0 12px;background:none;border:0;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text)}
-        .ac-stamp-btn:hover:not(:disabled){background:rgba(26,26,24,.06)}
-        .ac-stamp-btn.is-on{background:#1A1A18;color:#fff}
-        .ac-stamp-btn.is-on .stamp-tool rect:not(:last-child){fill:#fff}
-        .ac-stamp-btn:disabled{opacity:.4;cursor:default}
-        .ac-stamp-btn b{font-weight:500;font-size:10px;margin-left:2px;color:var(--text-dim)}
-        .ac-stamp-btn.is-on b{color:rgba(255,255,255,.6)}
-        .ac-stamps{position:absolute;left:0;bottom:calc(100% + 10px);display:grid;grid-template-columns:repeat(4,52px);gap:2px;padding:6px;background:#fff;border:1px solid #1A1A18;animation:stkIn .3s cubic-bezier(.3,1.5,.5,1) both;transform-origin:bottom left}
-        .ac-stamps button{display:flex;align-items:center;justify-content:center;width:52px;height:52px;background:none;border:0;padding:0;cursor:pointer;transition:background .15s ease,scale .25s cubic-bezier(.3,1.5,.5,1)}
-        .ac-stamps button:hover{background:rgba(26,26,24,.06);scale:1.1}
-        .ac-stamps button.is-on{background:rgba(26,26,24,.1)}
-        .ac-dock-tip{position:absolute;left:50%;bottom:calc(100% + 10px);translate:-50% 0;white-space:nowrap;padding:6px 10px;background:#1A1A18;color:#fff;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;animation:stkIn .5s .6s cubic-bezier(.3,1.5,.5,1) both}
-        .ac-ghost{position:fixed;left:0;top:0;z-index:7000;pointer-events:none;opacity:0;transition:opacity .15s ease;line-height:0}
-        .ac-ghost>*{display:block;translate:-50% -88%;rotate:-6deg;transform-origin:50% 88%;transition:scale .12s ease,translate .12s ease}
-        .ac-ghost.is-press>*{scale:.94;translate:-50% -80%}
-        .map{position:relative;width:100%}
-        .map-svg{position:absolute;inset:0;width:100%;height:100%;overflow:hidden}
-        .map-land{fill:none;stroke:#CFC7B8;stroke-width:4.6;stroke-linecap:round}
-        .map-stop{position:absolute;width:0;height:0}
-        .map-flower{position:absolute;left:-17px;top:-17px;line-height:0;cursor:default}
-        .map-flower:hover{z-index:5}
-        .map-label{position:absolute;left:50%;bottom:calc(100% + 8px);translate:-50% 4px;display:flex;flex-direction:column;gap:2px;white-space:nowrap;padding:6px 10px;background:#1A1A18;color:#fff;opacity:0;pointer-events:none;transition:opacity .2s ease,translate .25s cubic-bezier(.3,1.4,.5,1);line-height:1.2}
-        .map-flower:hover .map-label{opacity:1;translate:-50% 0}
-        .map-label b{font-family:'thermal-variable','Open Sauce Sans',sans-serif;font-weight:400;font-size:17px;letter-spacing:-.01em}
-        .map-label span{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.7)}
-        .map-label em{font-style:normal;color:#1A1A18;background:#fff;padding:1px 6px}
-        .places-list{display:none;list-style:none;margin:0;padding:0}
+        /* About */
+        /* About: the intro sits on a feathered square layered over a vivid glyph field */
+        .heroband{position:relative;width:100vw;margin-left:calc(50% - 50vw);margin-top:calc(-1 * var(--top));padding:calc(var(--top) + 24px) 60px 150px;min-height:780px}
+        .heroband::before{content:'';position:absolute;left:0;top:0;width:100%;height:110px;z-index:1;background:linear-gradient(to bottom,var(--bg) 40%,transparent);pointer-events:none}
+        .heroband-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;-webkit-mask-image:linear-gradient(to bottom,#000 72%,transparent);mask-image:linear-gradient(to bottom,#000 72%,transparent)}
+        .heroband-in{position:relative;z-index:2;max-width:1040px;margin:0 auto}
+        .heroband-hint{position:absolute;right:60px;bottom:120px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text);background:var(--bg);padding:6px 12px;pointer-events:none;transition:opacity .6s ease}
+        .heroband-hint.is-gone{opacity:0}
+        /* the frosted square: the portrait and text sit together, centred in it, with room to breathe */
+        .about-panel{position:relative;display:flex;justify-content:center;align-items:flex-start;gap:56px;width:max-content;max-width:calc(100% + 120px);margin:0 auto;padding:140px 130px;--feather:84px}
+        .about-frost{position:absolute;inset:0;background:transparent;-webkit-backdrop-filter:blur(9px) saturate(.95);backdrop-filter:blur(9px) saturate(.95);
+          -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--feather),#000 calc(100% - var(--feather)),transparent),linear-gradient(to bottom,transparent,#000 var(--feather),#000 calc(100% - var(--feather)),transparent);
+          -webkit-mask-composite:source-in;mask-image:linear-gradient(to right,transparent,#000 var(--feather),#000 calc(100% - var(--feather)),transparent),linear-gradient(to bottom,transparent,#000 var(--feather),#000 calc(100% - var(--feather)),transparent);mask-composite:intersect}
+        .about-panel>*:not(.about-frost){position:relative;z-index:1}
+        .about-avatar{flex:none;width:112px;height:112px;margin-top:4px;border-radius:50%;overflow:hidden;background:rgba(26,26,24,.06)}
+        .about-avatar img{display:block;width:100%;height:100%;object-fit:cover;object-position:48% 50%;transform:scale(1.4);transform-origin:48% 50%}
+        .about-copy{display:flex;flex-direction:column;gap:16px;max-width:560px}
+        .about-copy p{font-size:15px;line-height:1.75;color:var(--text)}
+        .about-sign{font-family:'thermal-variable','Open Sauce Sans',sans-serif;font-size:22px;letter-spacing:-.01em;color:var(--text);margin-top:4px}
+        /* a divider between the CV-style sections (none above the first) */
+        .about-sec+.about-sec{border-top:1px solid #1A1A18;padding-top:24px}
+        .places-sec{display:flex;flex-direction:column;gap:22px;border-top:1px solid #1A1A18;padding-top:28px}
+        .places-title{font-family:'thermal-variable','Open Sauce Sans',sans-serif;font-weight:400;font-size:22px;letter-spacing:-.02em;line-height:1.1;color:var(--text)}
+        .places{display:flex;flex-direction:column;gap:22px}
+        .map-box{position:relative;width:100%}
+        .map-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+        .map-land{fill:#DCD5C8;stroke:#DCD5C8;stroke-width:5;stroke-linejoin:round}
+        .map-pin{position:absolute;width:0;height:0}
+        .map-dot{position:absolute;left:-6px;top:-6px;width:12px;height:12px;padding:0;border:0;border-radius:50%;background:#1A1A18;box-shadow:0 0 0 3px rgba(245,242,238,.9);cursor:pointer;transition:opacity .2s ease}
+        .map-dot::after{content:'';position:absolute;inset:-9px}
+        .map-bloom{position:absolute;left:-15px;top:-15px;line-height:0;opacity:0;transition:opacity .2s ease;pointer-events:none}
+        .map-pin.is-on{z-index:6}
+        .map-pin.is-on .map-dot{opacity:0}
+        .map-pin.is-on .map-bloom{opacity:1}
+        /* the place's photo opens beside the pin, like the intro photos on home */
+        .map-peek{position:absolute;left:20px;top:0;translate:0 -50%;width:160px;margin:0;padding:5px 5px 10px;background:#fff;border:1px solid rgba(26,26,24,.1);box-shadow:0 14px 32px -14px rgba(26,26,24,.4);opacity:0;scale:.9;transform-origin:left center;pointer-events:none;transition:opacity .18s ease,scale .22s cubic-bezier(.2,.8,.3,1)}
+        .map-pin.is-flip .map-peek{left:auto;right:20px;transform-origin:right center}
+        .map-pin.is-on .map-peek{opacity:1;scale:1}
+        .map-peek-img{aspect-ratio:4/5;overflow:hidden;background:rgba(26,26,24,.05);display:flex;align-items:center;justify-content:center}
+        .map-peek-img img{display:block;width:100%;height:100%;object-fit:cover}
+        .map-peek-flower{line-height:0}
+        .map-peek figcaption{display:flex;flex-direction:column;gap:2px;padding:8px 4px 0}
+        .map-peek b{font-family:'thermal-variable','Open Sauce Sans',sans-serif;font-weight:400;font-size:16px;letter-spacing:-.015em;line-height:1.15;color:var(--text)}
+        .map-peek figcaption span{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-mid)}
+        .place-names{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 22px}
+        .place-names button{display:inline-flex;align-items:center;gap:8px;padding:0;background:none;border:0;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-mid);transition:color .2s ease}
+        .place-names button:hover,.place-names button.is-on{color:var(--text)}
+        .place-names em{font-style:normal;color:#fff;background:#1A1A18;padding:1px 6px}
+        /* a divider between the CV-style sections (none above the first) */
+        .about-sec+.about-sec{border-top:1px solid #1A1A18;padding-top:24px}
         @media (max-width:860px){
-          .ac{height:auto;padding:84px 18px 70px;cursor:auto;touch-action:auto;background-position:0 0}
-          .ac-world{position:static;display:grid;grid-template-columns:1fr 1fr;gap:22px 16px;align-items:start;translate:none!important}
-          .ac-item{position:relative;left:auto!important;top:auto!important;width:auto!important;rotate:0deg!important}
-          .ac-sticky,.ac-label{grid-column:1 / -1}
-          .ac-flower,.ac-hint{display:none}
-          .ac-dock{position:sticky;bottom:12px;margin:24px auto 0}
-          .places-list{display:grid;gap:12px;margin-top:20px}
-          .places-list li{font-size:15px;color:var(--text)}
-          .places-list li span{display:block;margin-top:2px;font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
+          .heroband{padding:calc(var(--top) + 24px) 24px 120px;min-height:0}
+          .about-panel{flex-direction:column;align-items:flex-start;gap:22px;width:auto;max-width:none;margin:0 -24px;padding:80px 24px;--feather:36px}
+          .about-avatar{width:96px;height:96px}
+          .heroband-hint{display:none}
         }
-        .about-block{display:flex;flex-direction:column;gap:24px;border-top:1px solid #1A1A18;padding-top:24px}
-        .about-label{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);align-self:start;padding-top:3px}
+        .about-label{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-mid);align-self:start;padding-top:3px}
         .about-label i,.about-dot{display:inline-block;width:6px;height:6px;flex-shrink:0}
         .about-label i{background:#1A1A18}
         .about-dot{align-self:center}
@@ -1567,9 +1456,9 @@ export default function Portfolio() {
         .about-item:first-child{padding-top:0}
         .about-item:last-child{border-bottom:none}
         .about-item-main{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
-        .about-item-company{font-size:14px;font-weight:600;color:var(--text)}
-        .about-item-role{font-size:13px;color:var(--text-mid)}
-        .about-item-date{font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);white-space:nowrap;flex-shrink:0}
+        .about-item-company{font-size:15px;font-weight:600;color:var(--text)}
+        .about-item-role{font-size:15px;color:var(--text)}
+        .about-item-date{font-family:'DM Mono',monospace;font-size:11px;color:var(--text-mid);white-space:nowrap;flex-shrink:0}
 
         @media (max-width:860px){
           .about-page{padding:72px 24px 60px}
@@ -1614,12 +1503,12 @@ export default function Portfolio() {
       {loading && <Loader onDone={finishLoading} quiet={quietBg} />}
       <CardCursor />
 
-      {!loading && page !== 'about' && <BackgroundField quiet={quietBg} />}
+      {!loading && <BackgroundField quiet={quietBg} />}
       <SoundToggle />
       <PeekCard />
 
       <div className="floating-nav">
-        <PageNav page={page} goHome={goHome} goArchive={goArchive} goAbout={goAbout} />
+        <PageNav page={page} goHome={goHome} goArchive={goArchive} goAbout={goAbout} goHandmade={goHandmade} />
       </div>
 
       {page === 'home' && (
@@ -1673,13 +1562,29 @@ export default function Portfolio() {
       </section>
       )}
 
+      {page === 'handmade' && (
+      /* ── Handmade: the Tinkering grid, without links or hover text ── */
+      <section id="handmade" className="archive archive-page">
+        <StudioGrid />
+      </section>
+      )}
+
       {page === 'lab' && Lab3D && <Suspense fallback={null}><Lab3D /></Suspense>}
 
       {page === 'about' && (
       /* ── About: clean, resume-style — company / title / date rows, same width as the Work page ── */
-      <>
-      <AboutCanvas />
       <section id="about" className="about-page">
+        <HeroField>
+          <div className="heroband-in"><div className="about-panel">
+            <span className="about-frost" aria-hidden="true" />
+            <div className="about-avatar"><img src={PROFILE_IMG} alt="Jayden Kang" draggable="false" /></div>
+            <div className="about-copy">
+              {ABOUT_STORY.map((text, i) => <p key={i}>{text}</p>)}
+              <span className="about-sign">Jayden</span>
+            </div>
+          </div></div>
+        </HeroField>
+
         <div className="about-sec">
         <span className="about-label"><i />Experience</span>
         <div className="about-list">
@@ -1719,12 +1624,11 @@ export default function Portfolio() {
         </div>
         </div>
 
-        <div className="about-block">
-        <span className="about-label"><i />Places</span>
-        <Places />
+        <div className="places-sec">
+          <h2 className="places-title">Places I've called home</h2>
+          <Places />
         </div>
       </section>
-      </>
       )}
 
       <SiteFooter snapEnd={page === 'home'} />
