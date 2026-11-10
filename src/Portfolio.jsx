@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { flushSync } from "react-dom";
+import { ParamField, Glyph, breathe, fieldTime, cellNoise } from "./Glyphs.jsx";
+import { MAP } from "./worldMap.js";
+import { loadStickers, placeSticker, usedCount, STICKER_LIMIT } from "./stickers.js";
 import ClassDiscovery from "./ClassDiscovery.jsx";
 import Onboarding from "./Onboarding.jsx";
 import AACDevice from "./AACDevice.jsx";
@@ -14,7 +17,7 @@ import AdobeAnim from "./AdobeAnim.jsx";
 import AdobeVisionAnim from "./AdobeVisionAnim.jsx";
 import { AnimImg } from "./caseKit.jsx";
 import { MapsAnim, AACAnim, ZuoraAnim, NordAnim } from "./ExpAnims.jsx";
-import { play, isOn, setOn, subscribe } from "./sound.js";
+import { play, playBloom, playSparkle, isOn, setOn, subscribe } from "./sound.js";
 
 // Dev-only sandbox for 3D ideas (#/lab). Tree-shaken out of production builds.
 const Lab3D = import.meta.env.DEV ? lazy(() => import("./Lab3D.jsx")) : null;
@@ -32,6 +35,8 @@ function ScrollReveal({ children }) {
     }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
     root.querySelectorAll('section').forEach((sec) => {
       Array.from(sec.children).forEach((el, i) => {
+        // anything already on screen when the page opens just appears with the page transition, no second animation
+        if (el.getBoundingClientRect().top < window.innerHeight * 0.95) return;
         el.classList.add('rv');
         el.style.transitionDelay = Math.min(i, 4) * 90 + 'ms';
         io.observe(el);
@@ -55,14 +60,45 @@ const HIGHLIGHTS = Object.keys(HIGHLIGHT_COLORS);
 // Hovering a company or school in the intro pops up a small photo from that chapter (files in public/assets/Intro/).
 const PEEKS = { Adobe: 'adobe', Skillshare: 'skillshare', UW: 'uw', USC: 'usc' };
 
+// Marker before a name or project: a small filled flower hand-colored per brand (petals, a lighter inner bloom,
+// a bright center). No strokes, so it stays clean at 18px. A plain circle until hovered (the word in the intro, or the card), then it blooms.
+const BRAND_GLYPH = {
+  [NAME]: { solid: true, N: 5, petal: 0.4, cs: ['#1A1A18', '#F2B600', '#fff'], coreColor: '#D5287A' },
+  Adobe: { solid: true, N: 6, petal: 0.4, cs: ['#E3000F', '#FF9A5A', '#fff'], coreColor: '#FFE066' },
+  Skillshare: { solid: true, N: 5, petal: 0.4, cs: ['#00A86B', '#9FE6B8', '#fff'], coreColor: '#F2B600' },
+  UW: { solid: true, N: 8, petal: 0.4, cs: ['#4B2E83', '#B9A3F0', '#fff'], coreColor: '#E0C97A' },
+  USC: { solid: true, N: 6, petal: 0.4, cs: ['#990000', '#FF6A5A', '#fff'], coreColor: '#FFCC00' },
+};
+BRAND_GLYPH['University of Washington'] = BRAND_GLYPH.UW;
+function Bullet({ name, active = true, hover, host }) {
+  // A plain circle until hovered, then it blooms into the flower. `hover` is controlled by the caller (the intro words);
+  // otherwise it follows the pointer over the closest `host` element (a card).
+  const wrap = useRef(null);
+  const [h, setH] = useState(false);
+  useEffect(() => {
+    const el = host && wrap.current ? wrap.current.closest(host) : null;
+    if (!el) return;
+    const on = () => setH(true), off = () => setH(false);
+    el.addEventListener('mouseenter', on); el.addEventListener('mouseleave', off);
+    return () => { el.removeEventListener('mouseenter', on); el.removeEventListener('mouseleave', off); };
+  }, [host]);
+  return (
+    <span ref={wrap} className="gb-wrap">
+      <Glyph className={`gbullet${active ? ' is-active' : ''}`} seed={1} recipe={BRAND_GLYPH[name] || BRAND_GLYPH[NAME]} open={0.92} hover={name === NAME ? undefined : hover === undefined ? h : hover} size={18} />
+    </span>
+  );
+}
+
 function Bio({ text, hot }) {
+  const [over, setOver] = useState(null);   // the word under the pointer: its glyph blooms while the photo opens
   const pattern = new RegExp(`(${HIGHLIGHTS.join('|')})`, 'g');
   return (
     <p className="intro-text">
       {text.split(pattern).map((chunk, i) =>
         HIGHLIGHTS.includes(chunk) ? (
-          <span key={i} data-peek={PEEKS[chunk]} className={`brand${chunk === hot ? ' is-hot' : ''}`} style={chunk === hot ? { color: HIGHLIGHT_COLORS[chunk] } : undefined}>
-            <span className="pixel-bullet is-active" style={{ background: HIGHLIGHT_COLORS[chunk] }} />
+          <span key={i} data-peek={PEEKS[chunk]} className={`brand${chunk === hot ? ' is-hot' : ''}`} style={chunk === hot ? { color: HIGHLIGHT_COLORS[chunk] } : undefined}
+            onMouseEnter={() => setOver(chunk)} onMouseLeave={() => setOver(null)}>
+            <Bullet name={chunk} hover={chunk === over} />
             {chunk}
           </span>
         ) : chunk
@@ -142,12 +178,17 @@ const CARDS = [
 // ── Primary page nav — Work / Archive / About, identical on every page (current page bolded,
 // not omitted). Lives inside the rail on the home page, in the slot the "Selected Work" TOC used
 // to occupy; floats unobtrusively (no bar chrome) on the single-column Archive/About pages. ──
+// a four-point twinkle (used for the Tinkering hover)
+const Twinkle = ({ color, size }) => (
+  <svg width={size} height={size} viewBox="-1 -1 2 2" aria-hidden="true"><path d="M0 -1Q.1 -.1 1 0Q.1 .1 0 1Q-.1 .1 -1 0Q-.1 -.1 0 -1Z" fill={color} /></svg>
+);
+
 function PageNav({ page, goHome, goArchive, goAbout }) {
   return (
     <nav className="rail-nav" aria-label="Primary">
-      <a href="#work-0" className={`rail-nav-link pixel-underline${page === 'home' || page === 'case' ? ' is-current' : ''}`} onClick={goHome('work-0')}>Work</a>
-      <a href="#experimentation" className={`rail-nav-link pixel-underline${page === 'archive' || ARCHIVE_PAGE_KEYS.includes(page) ? ' is-current' : ''}`} onClick={goArchive}>Tinkering<span className="sparkles" aria-hidden="true"><i /><i /><i /><i /><i /></span></a>
-      <a href="#about" className={`rail-nav-link pixel-underline${page === 'about' ? ' is-current' : ''}`} onClick={goAbout}>About<span className="fx-smile" aria-hidden="true" /></a>
+      <a href="#work-0" className={`rail-nav-link link-underline${page === 'home' || page === 'case' ? ' is-current' : ''}`} onClick={goHome('work-0')}>Work</a>
+      <a href="#experimentation" className={`rail-nav-link link-underline${page === 'archive' || ARCHIVE_PAGE_KEYS.includes(page) ? ' is-current' : ''}`} onClick={goArchive}>Tinkering<span className="sparkles" aria-hidden="true"><Twinkle color="#F2B600" size={13} /><Twinkle color="#D5287A" size={10} /><Twinkle color="#2D5BD6" size={12} /><Twinkle color="#F2B600" size={9} /><Twinkle color="#1E9A8A" size={11} /></span></a>
+      <a href="#about" className={`rail-nav-link link-underline${page === 'about' ? ' is-current' : ''}`} onClick={goAbout}>About<span className="fx-smile" aria-hidden="true" /></a>
     </nav>
   );
 }
@@ -206,7 +247,7 @@ function untiltCard(e) {
   t.style.setProperty('--tx', '0'); t.style.setProperty('--ty', '0');
 }
 
-// ── Right column: scroll-driven stack of cards. Each card's company label carries a pixel-bullet
+// ── Right column: scroll-driven stack of cards. Each card's company label carries a glyph bullet
 // marker that fills in when that card is the one nearest viewport-center — the active-state cue
 // the removed "Selected Work" TOC used to carry, now living on the cards themselves. ──
 function WorkStack({ activeIdx, onActiveChange, onOpenCase }) {
@@ -275,7 +316,7 @@ function WorkStack({ activeIdx, onActiveChange, onOpenCase }) {
               {c.current && <span className="card-badge">Currently</span>}
             </div>
             <div className="card-body">
-              <span className="card-company"><span className={`pixel-bullet${i === activeIdx ? ' is-active' : ''}`} style={{ background: c.color }} />{c.company}</span>
+              <span className="card-company"><Bullet name={c.company} active={i === activeIdx} host=".card" />{c.company}</span>
               <h3 className="card-title">{c.title}</h3>
               <p className="card-tags">{c.tags.map((t, j) => <span key={t}>{j > 0 && <i />}{t}</span>)}</p>
             </div>
@@ -298,7 +339,7 @@ function CaseStudy({ card }) {
   return (
     <section className="case-page">
       <div className="case-hero">
-        <span className="card-company"><span className="pixel-bullet is-active" style={{ background: card.color }} />{card.company}</span>
+        <span className="card-company"><Bullet name={card.company} />{card.company}</span>
         <h1 className="case-title">{card.title}</h1>
         <p className="case-desc">{card.desc}</p>
         {card.metrics && (
@@ -320,7 +361,7 @@ function CaseStudy({ card }) {
               <a
                 key={s}
                 href={`#${slugify(s)}`}
-                className="rail-nav-link pixel-underline"
+                className="rail-nav-link link-underline"
                 onClick={(e) => { e.preventDefault(); document.getElementById(slugify(s))?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
               >
                 {s}
@@ -546,35 +587,12 @@ function ArchiveGrid({ modalSlug, onOpenModal, onCloseModal, onOpenPage }) {
   );
 }
 
-// ── About: profile photo and hobby strip. Web-sized copies live in public/assets/About/web/ (the
+// ── About: profile photo, plus the Outside of Design shelf, film strip and Places below. Web-sized copies live in public/assets/About/web/ (the
 // originals next to them are several MB each). Photos keep their own aspect ratio. To add more,
-// drop a resized file in web/ and add its name to HOBBY_PHOTOS. ──
+// drop a resized file in web/ and add it to BOARD below. ──
 const ABOUT_DOT = { Adobe: '#E3000F', Skillshare: '#00A86B', 'University of Washington': '#4B2E83', 'University of Southern California': '#990000' };
-// Small pixel-art illustrations for the About story (same square-pixel language as the rest of the site).
-// They sit inline in the paragraph, exactly one line tall (14 grid rows = 1.75em = the text's line-height),
-// with the drawing centered inside that box.
-const ART_ROWS = 14;
-function PixelArt({ rows, palette }) {
-  const w = Math.max(...rows.map((r) => r.length));
-  const top = Math.floor((ART_ROWS - rows.length) / 2);
-  return (
-    <svg className="px-inline" style={{ width: `${(w / ART_ROWS) * 1.75}em` }} viewBox={`0 0 ${w} ${ART_ROWS}`} shapeRendering="crispEdges" aria-hidden="true">
-      {rows.flatMap((row, y) => [...row].map((c, x) => (palette[c] ? <rect key={`${x}-${y}`} x={x} y={y + top} width="1" height="1" fill={palette[c]} /> : null)))}
-    </svg>
-  );
-}
-const ART_CUPCAKE = {
-  palette: { r: '#E0455B', p: '#F7B2C4', s: '#FFFFFF', w: '#E9A23B', v: '#D2891F' },
-  rows: ['......r.....', '.....rr.....', '....pppp....', '...pppppp...', '..pppppppp..', '..ppsppsps..', '..wvwvwvwv..', '..wvwvwvwv..', '...wvwvwv...', '...wvwvwv...', '....wvwv....'],
-};
-const ART_CHAT = {
-  palette: { a: '#00A86B', b: '#4B2E83', w: '#FFFFFF' },
-  rows: ['aaaaaaaa......', 'aawawawa......', 'aaaaaaaa......', 'aa............', '......bbbbbbbb', '......bwbwbwbb', '......bbbbbbbb', '..........bb..'],
-};
-const ART_HEART = {
-  palette: { r: '#E0455B' },
-  rows: ['.rr...rr.', 'rrrr.rrrr', 'rrrrrrrrr', 'rrrrrrrrr', '.rrrrrrr.', '..rrrrr..', '...rrr...', '....r....'],
-};
+// Small parametric glyphs for the About story; they sit inline in the paragraph like icons.
+
 // Recommendations from Skillshare colleagues, quoted as written (trimmed to whole sentences).
 // `photo` is a square headshot in public/assets/Kind/; without one the card shows an initial.
 const KIND_WORDS = [
@@ -621,197 +639,397 @@ function SiteFooter({ snapEnd }) {
 
 // About story: three short paragraphs; the pixel illustrations sit mid-sentence like inline icons.
 const ABOUT_STORY = [
-  ["As a kid, I stayed up past bedtime making tiny ", ART_CUPCAKE, " food, chasing every detail. That love of craft followed me into design. In college I studied visual branding and loved the storytelling, but it felt one-sided."],
-  ["Then at Skillshare, I launched my first real interaction and watched people use it. Suddenly there was a real person on the other end. UX felt like a ", ART_CHAT, " conversation. I build something, people respond, I respond back, and I fell for that loop. At Adobe, I got to design the conversation itself, shaping how generative AI agents behave in ways people can trust."],
-  ["Listening is what I care about most, and it's personal. I know what it's like to be left out of a design that wasn't built with me in mind, so I make things that work for ", ART_HEART, " everyone, without anyone noticing the effort."],
+  "As a kid, I stayed up past bedtime making tiny food, chasing every detail. That love of craft followed me into design. In college I studied visual branding and loved the storytelling, but it felt one-sided.",
+  "Then at Skillshare, I launched my first real interaction and watched people use it. Suddenly there was a real person on the other end. UX felt like a conversation. I build something, people respond, I respond back, and I fell for that loop. At Adobe, I got to design the conversation itself, shaping how generative AI agents behave in ways people can trust.",
+  "Listening is what I care about most, and it's personal. I know what it's like to be left out of a design that wasn't built with me in mind, so I make things that work for everyone, without anyone noticing the effort.",
 ];
 const PROFILE_IMG = '/assets/About/web/profile.jpg';
-// A few pottery, painting and baking photos in one calm, static row. Widths follow each photo's
-// aspect ratio (`a`) so every photo is the same height and none are cropped.
-const HOBBY_PHOTOS = [
-  { f: 'pottery1', a: 1 }, { f: 'drawing2', a: 800 / 591 }, { f: 'baking1', a: 1452 / 1464 },
-  { f: 'pottery3', a: 1 }, { f: 'drawing1', a: 1 }, { f: 'baking3', a: 1466 / 1280 },
-];
-
-function HobbyRow() {
+// The top of About is a frameless, dotted, endless-feeling canvas, edge to edge under the top nav. The intro is two clean sticky
+// notes beside the photo; below them the pottery, drawings and baking are scattered in three labelled clusters. Drag the whole
+// canvas (mouse, trackpad or swipe) to look around. Each piece is titled like a file name. Visitors can take a rubber stamp from
+// the dock, choose which one, and press it next to a favorite; impressions are shared (src/stickers.js, api/stickers.js).
+// x is px from the middle of the canvas, y from its top (designed 1440 wide; --k scales it down on narrower screens).
+// `slug` is the piece's id for stamps; `f` is the photo in public/assets/About/web/.
+const R = {
+  pink: { solid: true, N: 5, petal: 0.4, cs: ['#D5287A', '#F7B2C4', '#fff'], coreColor: '#F2B600' },
+  blue: { solid: true, N: 6, petal: 0.4, cs: ['#2D5BD6', '#A9C0FF', '#fff'], coreColor: '#F2B600' },
+  gold: { solid: true, N: 8, petal: 0.35, cs: ['#F2B600', '#FFE08A', '#fff'], coreColor: '#E3000F' },
+  green: { solid: true, N: 4, petal: 0.5, cs: ['#00A86B', '#9FE6B8', '#fff'], coreColor: '#F2B600' },
+  red: { solid: true, N: 6, petal: 0.4, cs: ['#E3000F', '#FF9A5A', '#fff'], coreColor: '#FFE066' },
+  teal: { solid: true, N: 5, petal: 0.3, cs: ['#1E9A8A', '#A5E3DA', '#fff'], coreColor: '#D5287A' },
+};
+// The stamps a visitor can choose from (ids are also listed in api/stickers.js). Each leaves a one-color ink impression.
+const STAMPS = {
+  pink: { ink: '#D5287A', N: 5, petal: 0.4 }, blue: { ink: '#2D5BD6', N: 6, petal: 0.4 }, gold: { ink: '#E0A100', N: 8, petal: 0.35 },
+  green: { ink: '#00A86B', N: 4, petal: 0.5 }, red: { ink: '#E3000F', N: 6, petal: 0.4 }, teal: { ink: '#1E9A8A', N: 5, petal: 0.3 },
+  spark: { ink: '#1A1A18', N: 4, petal: 0.88 }, smile: { ink: '#1A1A18', text: ':)' },
+};
+// the printed mark: ink where the stamp is solid, paper (white, which multiplies away) in the inner bloom
+function Impression({ kind, size }) {
+  const k = STAMPS[kind];
+  if (!k) return null;
+  return k.text
+    ? <span className="st-smile" style={{ width: size, height: size, fontSize: size * 0.6, color: k.ink }}>{k.text}</span>
+    : <Glyph seed={1} recipe={{ solid: true, N: k.N, petal: k.petal, cs: [k.ink, '#fff', '#fff'], coreColor: k.ink }} open={0.95} size={size} />;
+}
+// the rubber stamp itself: knob, neck, plate and a face in the stamp's ink
+function StampTool({ kind, size }) {
+  const c = (STAMPS[kind] || STAMPS.pink).ink;
   return (
-    <div className="hobby-row" aria-label="Pottery, painting and baking">
-      {HOBBY_PHOTOS.map(({ f, a }) => (
-        <img key={f} src={`/assets/About/web/${f}.jpg`} alt="" className="hobby-img" style={{ flexGrow: a, aspectRatio: a }} loading="lazy" />
-      ))}
+    <svg className="stamp-tool" width={size * 0.74} height={size} viewBox="0 0 44 60" aria-hidden="true">
+      <rect x="14" y="1" width="16" height="15" rx="7.5" fill="#1A1A18" />
+      <rect x="19" y="14" width="6" height="21" fill="#1A1A18" />
+      <rect x="4" y="33" width="36" height="9" fill="#1A1A18" />
+      <rect x="7" y="42" width="30" height="9" fill={c} />
+    </svg>
+  );
+}
+const CANVAS_INTRO = { profile: { x: -520, y: 150, w: 200, r: -3 }, one: { x: -310, y: 130, w: 470 }, two: { x: 190, y: 250, w: 290 } };
+const CANVAS_ITEMS = [
+  { label: 'pottery/', x: -850, y: 690 },
+  { slug: 'nesting-bowls', f: 'pottery1', title: 'nesting-bowls.jpg', w: 200, x: -850, y: 740, r: -3, pin: '#F2B600' },
+  { slug: 'bowls-on-butter', f: 'pottery2', title: 'bowls-on-butter.jpg', w: 190, x: -610, y: 715, r: 2, pin: '#2D5BD6' },
+  { slug: 'cups-after-dark', f: 'pottery3', title: 'cups-after-dark.jpg', w: 200, x: -780, y: 1010, r: 2, pin: '#1E9A8A' },
+  { slug: 'celadon-cup', f: 'pottery4', title: 'celadon-cup.jpg', w: 180, x: -540, y: 985, r: -3, pin: '#00A86B' },
+  { label: 'drawing/', x: -270, y: 690 },
+  { slug: 'still-life-with-guitar', f: 'drawing1', title: 'still-life-with-guitar.jpg', w: 200, x: -270, y: 740, r: 2, pin: '#E3000F' },
+  { slug: 'living-room-charcoal', f: 'drawing2', title: 'living-room-charcoal.jpg', w: 270, x: -10, y: 705, r: -2, pin: '#4B2E83' },
+  { slug: 'arms-crossed-pastel', f: 'drawing3', title: 'arms-crossed-pastel.jpg', w: 190, x: -240, y: 1020, r: -2, pin: '#D5287A' },
+  { slug: 'slate-portrait', f: 'drawing4', title: 'slate-portrait.png', w: 190, x: 40, y: 985, r: 3, pin: '#F2B600' },
+  { slug: 'red-portrait', f: 'drawing5', title: 'red-portrait.png', w: 190, x: 300, y: 1015, r: -2, pin: '#E3000F' },
+  { label: 'baking/', x: 520, y: 690 },
+  { slug: 'laminated-loaf', f: 'baking1', title: 'laminated-loaf.jpg', w: 200, x: 520, y: 740, r: 2, pin: '#2D5BD6' },
+  { slug: 'matcha-swirl', f: 'baking2', title: 'matcha-swirl.jpg', w: 240, x: 760, y: 705, r: -2, pin: '#00A86B' },
+  { slug: 'holiday-cookies', f: 'baking3', title: 'holiday-cookies.jpg', w: 210, x: 540, y: 995, r: -2, pin: '#F2B600' },
+  { slug: 'croissant-batch', f: 'baking4', title: 'croissant-batch.jpg', w: 190, x: 790, y: 975, r: 3, pin: '#E3000F' },
+];
+const CANVAS_FLOWERS = [
+  { x: -400, y: 640, size: 46, r: 12, recipe: R.pink }, { x: 250, y: 610, size: 42, r: -10, recipe: R.gold },
+  { x: 700, y: 620, size: 50, r: 8, recipe: R.teal }, { x: -940, y: 960, size: 44, r: -8, recipe: R.green },
+  { x: 480, y: 1250, size: 52, r: 6, recipe: R.blue }, { x: -300, y: 1280, size: 46, r: -12, recipe: R.red },
+];
+const px = (n) => `calc(${n} * var(--k) * 1px)`;
+const cx = (n) => `calc(50% + ${n} * var(--k) * 1px)`;   // x is measured from the middle of the canvas
+const clamp01 = (v, a = 0.04, b = 0.96) => Math.min(b, Math.max(a, v));
+
+function AboutCanvas() {
+  const root = useRef(null), world = useRef(null), ghost = useRef(null);
+  const pan = useRef({ x: 0, y: 0, k: 1, moved: false });
+  const [stickers, setStickers] = useState(null);   // everyone's stamps; null when there is no server (the dock hides)
+  const [armed, setArmed] = useState(null);         // the stamp in hand
+  const [last, setLast] = useState('pink');         // the stamp chosen most recently
+  const [picker, setPicker] = useState(false);      // the stamp palette is open
+  const [seen, setSeen] = useState(false);          // the first-visit hint has done its job
+  const [moved, setMoved] = useState(false);        // the canvas has been moved at least once (hides the drag hint)
+  const [used, setUsed] = useState(usedCount());
+  const left = STICKER_LIMIT - used;
+  useEffect(() => { let on = true; loadStickers().then((r) => { if (on) setStickers(r); }); return () => { on = false; }; }, []);
+  // the canvas is designed 1440 wide; below that it scales down together. The mobile layout is a plain stack (no panning).
+  const apply = () => {
+    const { x, y } = pan.current, el = root.current;
+    if (!el) return;
+    world.current.style.translate = `${x}px ${y}px`;
+    el.style.setProperty('--ox', `${x}px`); el.style.setProperty('--oy', `${y}px`);
+  };
+  useEffect(() => {
+    const fit = () => {
+      const k = Math.min(1, Math.max(0.7, window.innerWidth / 1440));
+      pan.current.k = k; root.current.style.setProperty('--k', k.toFixed(3));
+      if (window.innerWidth <= 860) { pan.current.x = 0; pan.current.y = 0; }
+      apply();
+    };
+    fit(); window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
+  const moveBy = (dx, dy) => {
+    const p = pan.current, k = p.k;
+    p.x = Math.max(-640 * k, Math.min(640 * k, p.x + dx));
+    p.y = Math.max(-440 * k, Math.min(110, p.y + dy));
+    if (!p.moved) { p.moved = true; setMoved(true); }
+    apply();
+  };
+  // a trackpad's sideways swipe pans too
+  useEffect(() => {
+    const el = root.current;
+    const wheel = (e) => {
+      if (window.innerWidth <= 860 || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      e.preventDefault(); moveBy(-e.deltaX, 0);
+    };
+    el.addEventListener('wheel', wheel, { passive: false });
+    return () => el.removeEventListener('wheel', wheel);
+  }, []);
+  // the stamp in hand follows the pointer; Esc puts it down
+  useEffect(() => {
+    if (!armed) return;
+    const g = ghost.current;
+    const move = (e) => {
+      const t = e.target.closest ? e.target : null;
+      g.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
+      g.style.opacity = t && t.closest('.ac-dock') ? 0 : t && t.closest('.is-votable') ? 1 : 0.5;
+    };
+    const key = (e) => { if (e.key === 'Escape') { setArmed(null); setPicker(false); } };
+    window.addEventListener('pointermove', move); window.addEventListener('keydown', key);
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('keydown', key); };
+  }, [armed]);
+  // drag anywhere on the canvas to move it (touch drags sideways only; vertical swipes still scroll the page)
+  const down = (e) => {
+    if (e.button !== 0 || window.innerWidth <= 860 || (e.target.closest && e.target.closest('.ac-dock'))) return;
+    const p = pan.current, touch = e.pointerType === 'touch';
+    let lx = e.clientX, ly = e.clientY, drag = false;
+    p.moved = false;
+    const move = (ev) => {
+      const dx = ev.clientX - lx, dy = ev.clientY - ly;
+      if (!drag && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) > 4) { drag = true; p.dragging = true; root.current.classList.add('is-drag'); }
+      if (!drag) return;
+      lx = ev.clientX; ly = ev.clientY;
+      moveBy(dx, touch ? 0 : dy);
+    };
+    const up = () => {
+      root.current && root.current.classList.remove('is-drag');
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      setTimeout(() => { p.dragging = false; }, 0);   // after the click that follows a drag has been ignored
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  };
+  const place = (e, it) => {
+    if (pan.current.dragging || !armed || left <= 0) return;
+    const el = e.currentTarget, r = el.getBoundingClientRect(), a = (-it.r * Math.PI) / 180;
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);   // undo the tilt to find the spot on the piece
+    const x = clamp01((dx * Math.cos(a) - dy * Math.sin(a) + el.offsetWidth / 2) / el.offsetWidth);
+    const y = clamp01((dx * Math.sin(a) + dy * Math.cos(a) + el.offsetHeight / 2) / el.offsetHeight);
+    const st = { p: it.slug, s: armed, x: +x.toFixed(3), y: +y.toFixed(3), r: Math.round(Math.random() * 40 - 20) };
+    ghost.current.classList.add('is-press'); setTimeout(() => ghost.current && ghost.current.classList.remove('is-press'), 200);
+    setStickers((l) => [...(l || []), st]);
+    setUsed((n) => n + 1);
+    setPicker(false);
+    if (left <= 1) setArmed(null);
+    placeSticker(st).catch(() => setStickers((l) => (l || []).filter((v) => v !== st)));
+  };
+  const I = CANVAS_INTRO;
+  return (
+    <section className={`ac${armed ? ' is-armed' : ''}`} ref={root} onPointerDown={down} aria-label="About">
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+        <filter id="ink-rough" x="-10%" y="-10%" width="120%" height="120%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="4" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="2" />
+        </filter>
+      </svg>
+      <div className="ac-world" ref={world}>
+        <figure className="ac-item ac-photo is-static" style={{ left: cx(I.profile.x), top: px(I.profile.y), width: px(I.profile.w), rotate: `${I.profile.r}deg`, '--pin': '#D5287A' }}>
+          <img src="/assets/About/web/profile.jpg" alt="Jayden Kang" draggable="false" />
+          <figcaption><span className="ac-title">jayden-kang.jpg</span></figcaption>
+          <i className="b-pin" style={{ background: '#D5287A' }} />
+        </figure>
+        <div className="ac-item ac-sticky" style={{ left: cx(I.one.x), top: px(I.one.y), width: px(I.one.w), '--tint': '#FFF2CC' }}>
+          <span className="ac-sticky-tag">hello.txt</span>
+          <h1 className="about-name">Hey, I'm Jayden!</h1>
+          <span className="about-tagline">Product Designer · Inclusive UX · Systems Thinking</span>
+          {ABOUT_STORY.slice(0, 2).map((text, i) => <p className="about-bio" key={i}>{text}</p>)}
+        </div>
+        <div className="ac-item ac-sticky" style={{ left: cx(I.two.x), top: px(I.two.y), width: px(I.two.w), '--tint': '#DDF1E6' }}>
+          <span className="ac-sticky-tag">listening.txt</span>
+          <p className="about-bio">{ABOUT_STORY[2]}</p>
+        </div>
+        {CANVAS_ITEMS.map((it) => it.label ? (
+          <span className="ac-item ac-label" key={it.label} style={{ left: cx(it.x), top: px(it.y) }}>{it.label}</span>
+        ) : (
+          <figure className={`ac-item ac-photo${stickers ? ' is-votable' : ''}`} key={it.slug} onClick={(e) => place(e, it)}
+            style={{ left: cx(it.x), top: px(it.y), width: px(it.w), rotate: `${it.r}deg`, '--pin': it.pin }}>
+            <img src={`/assets/About/web/${it.f}.jpg`} alt="" loading="lazy" draggable="false" />
+            <figcaption><span className="ac-title">{it.title}</span></figcaption>
+            <i className="b-pin" style={{ background: it.pin }} />
+            {(stickers || []).filter((s) => s.p === it.slug).slice(-12).map((s, k) => (
+              <span className="ac-stk" key={k} style={{ left: `${s.x * 100}%`, top: `${s.y * 100}%`, rotate: `${s.r}deg` }}><Impression kind={s.s} size={38} /></span>
+            ))}
+          </figure>
+        ))}
+        {CANVAS_FLOWERS.map((st, i) => (
+          <span className="ac-item ac-flower" key={i} style={{ left: cx(st.x), top: px(st.y), rotate: `${st.r}deg` }}><Glyph seed={1} recipe={st.recipe} open={0.95} size={st.size} /></span>
+        ))}
+      </div>
+      {!moved && <span className="ac-hint" aria-hidden="true">Drag the canvas</span>}
+      {stickers && (
+        <div className="ac-dock" role="toolbar" aria-label="Stamp">
+          {picker && (
+            <div className="ac-stamps" role="group" aria-label="Choose a stamp">
+              {Object.keys(STAMPS).map((k) => (
+                <button type="button" key={k} className={armed === k ? 'is-on' : ''} aria-label={`${k} stamp`} onClick={() => { setArmed(k); setLast(k); setPicker(false); }}>
+                  <Impression kind={k} size={30} />
+                </button>
+              ))}
+            </div>
+          )}
+          {!seen && left > 0 && !armed && <span className="ac-dock-tip">Stamp your favorites</span>}
+          <button type="button" className={`ac-stamp-btn${armed ? ' is-on' : ''}`} disabled={left <= 0} aria-pressed={!!armed} title={left <= 0 ? 'Out of stamps, thank you!' : 'Stamp'}
+            onClick={() => { setSeen(true); if (armed) { setArmed(null); setPicker(false); } else { setArmed(last); setPicker(true); } }}>
+            <StampTool kind={armed || last} size={30} />
+            <span>Stamp</span>
+            {left > 0 && <b>{left}</b>}
+          </button>
+        </div>
+      )}
+      <div className="ac-ghost" ref={ghost} aria-hidden="true">{armed && <StampTool kind={armed} size={52} />}</div>
+    </section>
+  );
+}
+
+// Places: where I have lived, on a world map (src/worldMap.js, generated by scripts/gen-world.mjs). The flowers bloom one
+// after another as the map scrolls into view; hover one to see the place.
+const PLACES = [
+  { key: 'portland', city: 'Portland', region: 'Oregon', role: 'Born', fx: -22, fy: 0 },
+  { key: 'seoul', city: 'Seoul', region: 'South Korea', role: 'Grew up', fx: 0, fy: 0 },
+  { key: 'la', city: 'Los Angeles', region: 'California', role: 'USC · undergrad', fx: -2, fy: 10 },
+  { key: 'london', city: 'London', region: 'England', role: 'Study abroad', fx: 0, fy: 0 },
+  { key: 'seattle', city: 'Seattle', region: 'Washington', role: 'UW · grad school', now: true, fx: 14, fy: -24 },
+];
+const PLACE_FLOWERS = { portland: R.pink, seoul: R.blue, la: R.gold, london: R.red, seattle: { solid: true, N: 5, petal: 0.4, cs: ['#4B2E83', '#B9A3F0', '#fff'], coreColor: '#E0C97A' } };
+// the map is cropped to the part with people on it (no Antarctica, little Arctic)
+const MAP_Y0 = 52, MAP_H = 340;
+function Places() {
+  const ref = useRef(null);
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let timer = 0;
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return;
+      io.disconnect();
+      let n = 0;
+      timer = setInterval(() => { n += 1; setShown(n); if (n >= PLACES.length) clearInterval(timer); }, 450);
+    }, { threshold: 0.35 });
+    io.observe(el);
+    return () => { io.disconnect(); clearInterval(timer); };
+  }, []);
+  return (
+    <div className="places">
+      <div className="map" ref={ref} style={{ aspectRatio: `${MAP.W} / ${MAP_H}` }}>
+        <svg viewBox={`0 ${MAP_Y0} ${MAP.W} ${MAP_H}`} className="map-svg" role="img" aria-label="World map: Portland, Seoul, Los Angeles, London, Seattle">
+          <path d={MAP.dots} className="map-land" />
+        </svg>
+        {PLACES.map((p, i) => {
+          const [x, y] = MAP.pts[p.key];
+          return (
+            <div className="map-stop" key={p.key} style={{ left: `${(x / MAP.W) * 100}%`, top: `${((y - MAP_Y0) / MAP_H) * 100}%` }}>
+              <span className="map-flower" style={{ translate: `${p.fx}px ${p.fy}px` }}>
+                <Glyph seed={1} recipe={PLACE_FLOWERS[p.key]} open={0.92} hover={i < shown} size={34} />
+                <span className="map-label">
+                  <b>{p.city}</b>
+                  <span>{p.role}{p.now && <em>Now</em>}</span>
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <ol className="places-list">
+        {PLACES.map((p) => <li key={p.key}><b>{p.city}</b>, {p.region}<span>{p.role}</span></li>)}
+      </ol>
     </div>
   );
 }
 
-const LOADER_IMG = "/assets/Loader/mosaic.webp";
-
-// ── Loading curtain: a pixel grid sampled from the mosaic image (one flat color per cell,
-// read via canvas — not a stretched photo crop), each cell fading out to reveal the page beneath,
-// starting at the center and opening in a loose six-petal flower shape. ──
-function Loader({ onDone }) {
-  const [grid, setGrid] = useState(null);
+// ── Loading curtain: the parametric field fills the screen on the cream page color, breathes open for a
+// moment, then clears from the center outward. The clearing edge is a loose six-petal flower rather than a
+// circle: each cell's distance from the center is divided by a petal factor that swells and dips with its
+// angle. Cells the edge has passed don't vanish: they settle into the exact state of the page background
+// (same grid, same glyph, same shared clock), so when the curtain unmounts nothing changes on screen. ──
+const FIELD_CELL = 48;
+const bgAlpha = (quiet) => (quiet ? 0.035 : 0.06);
+function Loader({ onDone, quiet }) {
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
-
+  const t0 = useRef(fieldTime()).current;
+  const HOLD = 1.7, CLEAR = 1.5;   // seconds: breathing in, then clearing outward
   useEffect(() => {
-    const size = 22; // px per pixel cell — fine enough for the flower silhouette to read
-    const cols = Math.ceil(window.innerWidth / size);
-    const rows = Math.ceil(window.innerHeight / size);
-    // failsafe: if the window has no size yet (hidden pane) or the image fails, never trap the visitor behind the curtain
-    if (!cols || !rows) { const t0 = setTimeout(() => onDoneRef.current(), 0); return () => clearTimeout(t0); }
-    let cancelled = false;
-    let timer = null;
-
-    const img = new Image();
-    img.onload = () => {
-      if (cancelled) return;
-
-      // Crop the source image to the grid's aspect ratio (cover-fit) before downsampling,
-      // so each canvas pixel we sample is a true average of that cell's region — not stretched.
-      const gridRatio = cols / rows;
-      const imgRatio = img.naturalWidth / img.naturalHeight;
-      let sx, sy, sw, sh;
-      if (imgRatio > gridRatio) {
-        sh = img.naturalHeight;
-        sw = sh * gridRatio;
-        sx = (img.naturalWidth - sw) / 2;
-        sy = 0;
-      } else {
-        sw = img.naturalWidth;
-        sh = sw / gridRatio;
-        sx = 0;
-        sy = (img.naturalHeight - sh) / 2;
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = cols;
-      canvas.height = rows;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cols, rows);
-      const { data } = ctx.getImageData(0, 0, cols, rows);
-
-      const hold = 400;      // let the mosaic sit for a beat before it starts to go
-      const maxDelay = 1500; // spread of the dissolve across the whole screen
-      const duration = 700;  // each cell fades slowly rather than snapping off
-      const colors = [];
-      for (let i = 0; i < cols * rows; i++) {
-        const o = i * 4;
-        colors.push(`rgb(${data[o]},${data[o + 1]},${data[o + 2]})`);
-      }
-
-      // The dissolve opens from the center outward, and its edge is a six-petal flower rather
-      // than a circle: each cell's distance from the center is divided by a petal factor that
-      // swells and dips with its angle, so the clearing blooms out in six soft lobes. Jitter
-      // keeps the edge loose, so the shape is only hinted at.
-      const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
-      const raw = [];
-      let maxT = 0;
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          const dx = (col + 0.5) * size - cx, dy = (row + 0.5) * size - cy;
-          const petal = 1 + 0.3 * Math.cos(6 * Math.atan2(dy, dx) + 0.5);
-          const t = Math.hypot(dx, dy) / petal;
-          raw.push(t);
-          if (t > maxT) maxT = t;
-        }
-      }
-      const delays = raw.map((t) => hold + (t / maxT) * maxDelay + Math.random() * 140);
-
-      setGrid({ cols, rows, colors, delays });
-      timer = setTimeout(() => onDoneRef.current(), hold + maxDelay + duration + 200);
-    };
-    img.onerror = () => { if (!cancelled) onDoneRef.current(); };
-    img.src = LOADER_IMG;
-
-    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+    playSparkle(0, (HOLD + CLEAR) * 1000);   // chimes from the very start; silent until the browser lets audio start (it needs a click or key first)
+    const id = setTimeout(() => onDoneRef.current(), (HOLD + CLEAR + 0.15) * 1000);
+    return () => clearTimeout(id);
   }, []);
+  // Each cell clears on its own schedule: a loose pull from the centre outward, mostly scatter, so the
+  // curtain breaks up irregularly (like pixels dropping out) instead of sweeping away as one clean edge.
+  const WIN = 0.12;
+  const clearAt = (i, j, cx, cy, w, h) => {
+    const dx = cx - w / 2, dy = cy - h / 2;
+    const radial = Math.min(1, Math.hypot(dx, dy) / (Math.hypot(w / 2, h / 2)));
+    const n = 0.6 * cellNoise(i, j) + 0.4 * cellNoise(j + 57, i + 131);
+    return 0.3 * radial + 0.7 * n;
+  };
+  // 1 = still part of the curtain, 0 = cleared (now just the page background)
+  const keep = (i, j, cx, cy, w, h, T) => {
+    const t = T - t0;
+    if (t <= HOLD) return 1;
+    const th = clearAt(i, j, cx, cy, w, h) * (1 - WIN), p = (t - HOLD) / CLEAR;
+    return 1 - smoothstep(th, th + WIN, p);
+  };
+  // The cream sheet behind the glyphs goes transparent more gently than the glyphs do: it fades out a little ahead of
+  // them and is drawn from a tiny per-cell map scaled up smoothly, so no square ever shows as it disappears.
+  const sheet = useRef(null);
+  const sheetKeep = (i, j, cx, cy, w, h, T) => {
+    const p = (T - t0 - HOLD) / CLEAR;
+    if (p <= 0) return 1;
+    const st = clearAt(i, j, cx, cy, w, h) * 0.55;
+    return 1 - smoothstep(st, st + 0.35, p);
+  };
+  const bFn = (i, j, cols, rows, T, m, cx, cy, w, h) => {
+    const t = T - t0, grow = smoothstep(0, 1.1, t);
+    const full = breathe(i, j, cols, rows, T * 1.4) * 0.9 * grow + 0.08 * grow;
+    const s = keep(i, j, cx, cy, w, h, T);
+    const calm = bgField(i, j, cols, rows, T, m, cx, cy);
+    return calm + (full - calm) * s;
+  };
+  const aFn = (i, j, cols, rows, T, m, cx, cy, w, h) => { const s = keep(i, j, cx, cy, w, h, T), a = bgAlpha(quiet); return a + (1 - a) * s; };
+  const sFn = (i, j, cols, rows, T, m, cx, cy, w, h) => { const s = keep(i, j, cx, cy, w, h, T), c = bgSat(i, j, cols, rows, T, m, cx, cy); return c + (1 - c) * s; };
+  const pre = (ctx, { w, h, dpr, t: T, cell }) => {
+    updateAvoid();
+    // cream sheet under the glyphs (smooth, see sheetKeep)
+    const t = T - t0;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#F5F2EE';
+    if (t <= HOLD) { ctx.fillRect(0, 0, w, h); return; }
+    const cols = Math.ceil(w / cell) + 1, rows = Math.ceil(h / cell) + 1;
+    if (!sheet.current) sheet.current = document.createElement('canvas');
+    const sc = sheet.current;
+    if (sc.width !== cols || sc.height !== rows) { sc.width = cols; sc.height = rows; }
+    const sx = sc.getContext('2d'), img = sx.createImageData(cols, rows);
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      const o = (j * cols + i) * 4;
+      img.data[o] = 0xF5; img.data[o + 1] = 0xF2; img.data[o + 2] = 0xEE;
+      img.data[o + 3] = Math.round(255 * sheetKeep(i, j, (i + 0.5) * cell, (j + 0.5) * cell, w, h, T));
+    }
+    sx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(sc, 0, 0, cols * cell, rows * cell);
+    ctx.globalAlpha = 1;
+  };
+  return <ParamField className="loader" cell={FIELD_CELL} alpha={1} aFn={aFn} sFn={sFn} bFn={bFn} pre={pre} fps={45} />;
+}
+const smoothstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-  if (!grid) return <div className="loader" style={{ backgroundImage: `url(${LOADER_IMG})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />;
-
-  return (
-    <div className="loader" style={{ gridTemplateColumns: `repeat(${grid.cols},1fr)`, gridTemplateRows: `repeat(${grid.rows},1fr)` }}>
-      {grid.colors.map((c, i) => (
-        <div key={i} className="loader-cell" style={{ background: c, animationDelay: `${grid.delays[i]}ms` }} />
-      ))}
-    </div>
-  );
+// ── Page background: the same field, kept calm. Glyphs sit small and quiet and breathe slowly; near the
+// cursor they bloom open. Low alpha, and they clear out around the intro text so it always reads. ──
+let AVOID = null;
+const updateAvoid = () => {
+  const el = window.innerWidth > 860 ? document.querySelector('.intro-text') : null;
+  AVOID = el ? el.getBoundingClientRect() : null;
+};
+const avoidFactor = (cx, cy) => {
+  if (!AVOID) return 1;
+  const dx = Math.max(AVOID.left - 28 - cx, 0, cx - (AVOID.right + 28)), dy = Math.max(AVOID.top - 28 - cy, 0, cy - (AVOID.bottom + 28));
+  return smoothstep(0, 110, Math.hypot(dx, dy));
+};
+const bgBloom = (m, cx, cy) => { const d = Math.hypot(cx - m.x, cy - m.y); return Math.exp(-(d * d) / (2 * 90 * 90)); };
+// desaturated at rest; color comes back where the cursor is
+const bgSat = (i, j, cols, rows, t, m, cx, cy) => 0.08 + 0.92 * bgBloom(m, cx, cy);
+const bgField = (i, j, cols, rows, t, m, cx, cy) => {
+  const base = 0.03 + 0.2 * breathe(i, j, cols, rows, t * 0.6);
+  return Math.min(0.9, base + bgBloom(m, cx, cy) * 0.6) * avoidFactor(cx, cy);
+};
+function BackgroundField({ quiet }) {
+  // quieter on pages with long copy so the glyphs never compete with reading
+  return <ParamField className="field-canvas" cell={FIELD_CELL} alpha={bgAlpha(quiet)} bFn={bgField} sFn={bgSat} pre={updateAvoid} reactive fps={30} />;
 }
 
-const TRAIL_COLORS = ['#E3000F', '#00A86B', '#4B2E83', '#990000'];
-
-// ── Pixel trail left in the page background as the cursor moves — visible squares snapped to a
-// grid, each remembering its own creation time and fading independently. Because they fade purely
-// on their own age (not a shared canvas-wide wash), the oldest ones — the ones drawn first —
-// always reach zero opacity first: the trail dissolves in the order it was made, not all at once.
-// Runs on its own canvas + rAF loop with zero React state, so it never touches Portfolio's render
-// cycle. Nothing shows until the cursor has been there. ──
-function PixelTrail() {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const cell = 14; // grid size
-    const mark = cell; // fills the whole cell — no gap between adjacent pixels
-    const fadeMs = 550; // how long a single pixel takes to dissolve, from the moment it's drawn
-    const peakAlpha = 0.22; // kept low — this is ambient texture, not the thing to look at
-    let raf = null;
-    let last = { col: -1, row: -1 };
-    let mouse = { x: -1000, y: -1000 };
-    let colorIdx = 0;
-    let marks = []; // { col, row, color, createdAt } — in creation order
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener('resize', resize);
-
-    const onMove = e => { mouse = { x: e.clientX, y: e.clientY }; };
-    window.addEventListener('mousemove', onMove);
-
-    const loop = () => {
-      const now = performance.now();
-
-      const col = Math.floor(mouse.x / cell);
-      const row = Math.floor(mouse.y / cell);
-      if (col !== last.col || row !== last.row) {
-        last = { col, row };
-        marks.push({ col, row, color: TRAIL_COLORS[colorIdx % TRAIL_COLORS.length], createdAt: now });
-        colorIdx++;
-      }
-
-      // Drop fully-dissolved marks — since they were pushed in creation order, the ones at the
-      // front of the array (oldest) always age out first.
-      if (marks.length && now - marks[0].createdAt >= fadeMs) {
-        marks = marks.filter(m => now - m.createdAt < fadeMs);
-      }
-
-      // Redraw from scratch each frame based on each mark's true elapsed age — correct
-      // regardless of how many frames were skipped in between, with no cumulative residue.
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (const m of marks) {
-        const age = now - m.createdAt;
-        ctx.globalAlpha = peakAlpha * (1 - age / fadeMs);
-        ctx.fillStyle = m.color;
-        ctx.fillRect(m.col * cell + (cell - mark) / 2, m.row * cell + (cell - mark) / 2, mark, mark);
-      }
-      ctx.globalAlpha = 1;
-
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-
-    return () => {
-      window.removeEventListener('resize', resize);
-      window.removeEventListener('mousemove', onMove);
-      cancelAnimationFrame(raf);
-    };
-  }, []);
-
-  return <canvas ref={canvasRef} className="pixel-trail-canvas" />;
-}
 
 // ── Hash routing: every page and archive modal has a URL, so the back button works and pieces can be
 // linked directly (#/work/adobe, #/experimentation/colorful, #/experimentation/glyqlo, #/about). `#/archive/...` still works. ──
@@ -836,6 +1054,17 @@ function parseHash(hash) {
 
 // Small photo that follows the cursor while it's over an intro word marked data-peek. It trails the pointer a
 // little and tilts with its speed. The frame loop only runs while a photo is showing.
+// A few glyphs from the opening animation bloom around the photo and keep breathing, softly, while it is open. Each photo
+// has its own arrangement: [left %, top %, size px, delay ms, seed]. Some overlap its corners and edges; none sit on the
+// hovered word, which is just left of it.
+const PEEK_LAYOUT = {
+  adobe: [[-2, -6, 38, 0, 3], [100, -4, 48, 90, 9], [96, 102, 32, 180, 21], [52, 108, 22, 240, 30]],
+  skillshare: [[103, 12, 34, 0, 14], [105, 62, 24, 100, 41], [72, 108, 44, 170, 5], [22, 105, 26, 240, 27], [-3, -3, 28, 60, 11]],
+  uw: [[48, -10, 32, 0, 33], [-4, 104, 42, 120, 17], [101, 40, 26, 60, 50], [92, 101, 38, 200, 2]],
+  usc: [[-3, -5, 42, 0, 25], [64, -11, 24, 80, 38], [104, 50, 40, 150, 7], [40, 106, 28, 220, 44], [100, 104, 22, 260, 19]],
+};
+const PEEK_NOTE = { adobe: 0, skillshare: 2, uw: 1, usc: 3 };   // where each photo's run of notes starts on the scale
+const PEEK_COLORS = Object.fromEntries(Object.entries(PEEKS).map(([name, k]) => [k, [...BRAND_GLYPH[name].cs.slice(0, 2), '#F2B600', '#2D5BD6', '#D5287A', '#1E9A8A']]));
 function PeekCard() {
   const box = useRef(null);
   const [key, setKey] = useState(null);   // the photo being shown (kept while it fades out)
@@ -865,6 +1094,7 @@ function PeekCard() {
       if (!t) return;
       s.tx = e.clientX; s.ty = e.clientY;
       if (!s.show) { s.x = s.tx; s.y = s.ty; s.rot = 0; }
+      if (!s.show) playBloom((PEEK_LAYOUT[t.dataset.peek] || []).map((p) => p[3]), PEEK_NOTE[t.dataset.peek] || 0);
       s.show = true; setKey(t.dataset.peek); setVisible(true); kick();
     };
     const onMove = (e) => { if (!s.show) return; s.tx = e.clientX; s.ty = e.clientY; kick(); };
@@ -883,6 +1113,13 @@ function PeekCard() {
       <div className="peek-in">
         {Object.values(PEEKS).map((k) => (warm || k === key) ? <img key={k} src={`/assets/Intro/${k}.jpg`} alt="" className={k === key ? 'is-cur' : ''} draggable="false" /> : null)}
       </div>
+      <div className="peek-glyphs">
+        {key && (PEEK_LAYOUT[key] || []).map(([x, y, size, delay, seed], n) => (
+          <span key={`${key}${n}`} className="peek-g" style={{ left: `${x}%`, top: `${y}%`, '--d': `${delay}ms` }}>
+            <Glyph seed={seed} colors={PEEK_COLORS[key]} open={0.95} minW={0.09} live={visible} lag={n * 1.3} range={[0.35, 0.95]} speed={1.1 + (n % 3) * 0.3} size={size} />
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -899,7 +1136,8 @@ function SoundToggle() {
 }
 
 // Which elements get which sound. Delegated from the document so the individual components stay untouched.
-const HOVER_SOUND = '[data-peek], .card, .bento-tile.is-link, .rail-nav-link, .ad-close, .sound-toggle';
+const HOVER_SOUND = '[data-peek], .card, .rail-nav-link, .ad-close, .sound-toggle';
+const NAV_SOUND = { '#work-0': 'navWork', '#experimentation': 'navTinker', '#about': 'navAbout' };
 const CLICK_SOUND = 'a, button, [role="button"], .card, .bento-tile.is-link';
 
 const nav = (hash) => { if (window.location.hash !== hash) window.location.hash = hash; };
@@ -914,7 +1152,7 @@ export default function Portfolio() {
   const [modalSlug, setModalSlug] = useState(initial.modal);
   const routeRef = useRef(initial.page + ':' + initial.caseIdx);
 
-  // UI sounds: a tick on hover (mouse only), a tap on click, a swish when the page changes.
+  // UI sounds: a tick on hover (mouse only), a pip on click, a swish when the page changes, a note per nav link.
   useEffect(() => {
     let over = null;
     const onOver = (e) => {
@@ -922,17 +1160,20 @@ export default function Portfolio() {
       const t = e.target.closest && e.target.closest(HOVER_SOUND);
       if (t === over) return;
       over = t;
-      if (t && !t.classList.contains('sound-toggle')) play('hover');
+      if (t && !t.classList.contains('sound-toggle')) play(t.classList.contains('rail-nav-link') ? NAV_SOUND[t.getAttribute('href')] || 'hover' : 'hover');
     };
-    const onClick = (e) => { if (e.target.closest && e.target.closest(CLICK_SOUND) && !e.target.closest('.sound-toggle')) play('click'); };
-    const onHash = () => play('swish');
+    let navAt = -1e9;   // the top nav keeps its hover sound but is silent on click (and on the page change it causes)
+    const onClick = (e) => {
+      if (!e.target.closest) return;
+      if (e.target.closest('.rail-nav-link')) { navAt = performance.now(); return; }
+      if (e.target.closest(CLICK_SOUND) && !e.target.closest('.sound-toggle')) play('click');
+    };
+    const onHash = () => { if (performance.now() - navAt > 500) play('swish'); };
     document.addEventListener('pointerover', onOver);
     document.addEventListener('click', onClick, true);
     window.addEventListener('hashchange', onHash);
     return () => { document.removeEventListener('pointerover', onOver); document.removeEventListener('click', onClick, true); window.removeEventListener('hashchange', onHash); };
   }, []);
-  const firstActive = useRef(true);
-  useEffect(() => { if (firstActive.current) { firstActive.current = false; return; } play('detent'); }, [activeIdx]);
 
   // Follow the URL: back/forward and direct links all land here.
   useEffect(() => {
@@ -941,8 +1182,10 @@ export default function Portfolio() {
       const key = r.page + ':' + r.caseIdx;
       const changed = key !== routeRef.current;
       const swap = () => {
+        // reset scroll first (instant: html has scroll-behavior:smooth) so the new page mounts at the top and its
+        // above-the-fold content can skip the reveal animation; the old page's snapshot is already taken
+        if (changed) window.scrollTo({ top: 0, behavior: 'instant' });
         flushSync(() => { setPage(r.page); setCaseIdx(r.caseIdx); setModalSlug(r.modal); });
-        if (changed) window.scrollTo({ top: 0, behavior: 'instant' });   // instant: html has scroll-behavior:smooth
       };
       routeRef.current = key;
       // Moving between pages cross-fades through the View Transitions API (a ~0.2s fade, see the ::view-transition
@@ -960,7 +1203,7 @@ export default function Portfolio() {
   useEffect(() => {
     if (!pendingScroll || page !== 'home') return;
     const raf = requestAnimationFrame(() => {
-      document.getElementById(pendingScroll.id)?.scrollIntoView({ behavior: 'smooth', block: pendingScroll.block });
+      document.getElementById(pendingScroll.id)?.scrollIntoView({ behavior: 'instant', block: pendingScroll.block });
       setPendingScroll(null);
     });
     return () => cancelAnimationFrame(raf);
@@ -981,10 +1224,12 @@ export default function Portfolio() {
   const goArchiveCase = (key) => nav(key === 'archive' ? '#/experimentation' : '#/experimentation/' + ARCHIVE_PAGES[key]);
   const goCase = (idx) => nav('#/work/' + WORK_SLUGS[idx]);
 
+  const quietBg = page === 'about' || page === 'case' || ARCHIVE_PAGE_KEYS.includes(page);
+
   return (
     <>
       <style>{`
-.rv{opacity:0;transform:translateY(28px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1)}
+.rv{opacity:0;transform:translateY(16px);transition:opacity .6s cubic-bezier(.2,.7,.2,1),transform .6s cubic-bezier(.2,.7,.2,1)}
 .rv.rv-in{opacity:1;transform:none}
         /* fonts (Open Sauce Sans, DM Mono) are self-hosted and imported in main.jsx via @fontsource */
 
@@ -997,14 +1242,17 @@ export default function Portfolio() {
         body{background:var(--bg);color:var(--text);font-family:'Open Sauce Sans',sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
         /* headings use Thermal (Adobe Fonts kit linked in index.html); everything else stays Open Sauce Sans */
         /* page-to-page cross-fade (View Transitions API); the fixed nav and sound toggle keep their own layers so they stay put */
-        ::view-transition-group(root){animation-duration:.22s}
-        ::view-transition-old(root),::view-transition-new(root){animation-timing-function:ease}
+        ::view-transition-group(root){animation-duration:.3s}
+        ::view-transition-old(root){animation:vtOut .16s ease both}
+        ::view-transition-new(root){animation:vtIn .3s cubic-bezier(.2,.7,.2,1) both}
+        @keyframes vtOut{to{opacity:0}}
+        @keyframes vtIn{from{opacity:0;transform:translateY(6px)}}
         .floating-nav{view-transition-name:site-nav}
         .sound-toggle{view-transition-name:sound-toggle}
         h1,h2,h3{font-family:'thermal-variable','Open Sauce Sans',sans-serif;font-weight:400}
 
-        /* Canvas for PixelTrail — nothing shows until the cursor has actually moved over it */
-        .pixel-trail-canvas{position:fixed;inset:0;z-index:-1;pointer-events:none;width:100vw;height:100vh}
+        /* parametric glyph field behind the page, and the same canvas as the loading curtain */
+        .field-canvas{position:fixed;inset:0;z-index:-1;pointer-events:none;width:100vw;height:100vh}
 
         @keyframes nP{0%,100%{opacity:.25}50%{opacity:1}}
         @keyframes lC{0%{stroke-dashoffset:70;opacity:0}40%{opacity:.7}60%{stroke-dashoffset:0;opacity:.7}100%{stroke-dashoffset:70;opacity:0}}
@@ -1014,21 +1262,21 @@ export default function Portfolio() {
         .rail-nav{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
         .rail-nav-link{font-size:12px;color:var(--text-dim);text-decoration:none;transition:color .15s}
         .rail-nav-link:hover{color:var(--text)}
-        /* "Tinkering" throws a few pixel sparkles on hover: little plus-shaped stars made of 2px squares */
+        /* "Tinkering" blooms a few little parametric glyphs around the word on hover */
         .rail-nav-link{position:relative}
         .sparkles{position:absolute;inset:0;pointer-events:none}
-        .sparkles i{position:absolute;width:2px;height:2px;background:var(--c);box-shadow:2px 0 0 var(--c),-2px 0 0 var(--c),0 2px 0 var(--c),0 -2px 0 var(--c);opacity:0;transform:scale(0)}
-        .sparkles i:nth-child(1){left:-8px;top:-6px;--c:#E9A23B}
-        .sparkles i:nth-child(2){left:30%;top:-12px;--c:#F7B2C4}
-        .sparkles i:nth-child(3){left:62%;top:-8px;--c:#E9A23B}
-        .sparkles i:nth-child(4){right:-10px;top:2px;--c:#B9A6F0}
-        .sparkles i:nth-child(5){left:46%;bottom:-12px;--c:#F7B2C4}
+        .sparkles svg{position:absolute;opacity:0;scale:0}
+        .sparkles svg:nth-child(1){left:-12px;top:-9px}
+        .sparkles svg:nth-child(2){left:32%;top:-15px}
+        .sparkles svg:nth-child(3){left:64%;top:-12px}
+        .sparkles svg:nth-child(4){right:-12px;top:3px}
+        .sparkles svg:nth-child(5){left:44%;bottom:-15px}
         @media (prefers-reduced-motion:no-preference){
-          .rail-nav-link:hover .sparkles i{animation:sparkle .9s steps(6,end) infinite}
-          .sparkles i:nth-child(2){animation-delay:.15s!important}
-          .sparkles i:nth-child(3){animation-delay:.3s!important}
-          .sparkles i:nth-child(4){animation-delay:.45s!important}
-          .sparkles i:nth-child(5){animation-delay:.6s!important}
+          .rail-nav-link:hover .sparkles svg{animation:twinkle 1.05s ease-in-out infinite}
+          .sparkles svg:nth-child(2){animation-delay:.2s!important}
+          .sparkles svg:nth-child(3){animation-delay:.45s!important}
+          .sparkles svg:nth-child(4){animation-delay:.1s!important}
+          .sparkles svg:nth-child(5){animation-delay:.65s!important}
         }
         /* About: a sideways :) pops in above the word, the same smile as the footer */
         .fx-smile{position:absolute;left:100%;top:-11px;margin-left:-2px;pointer-events:none;font-family:'DM Mono',monospace;font-size:11px;line-height:1;color:var(--text);opacity:0;transform:rotate(90deg) scale(0)}
@@ -1037,12 +1285,19 @@ export default function Portfolio() {
           .rail-nav-link:hover .fx-smile{animation:smilePop .5s steps(5,end) forwards}
         }
         @keyframes smilePop{0%{opacity:0;transform:rotate(90deg) scale(0)}60%{opacity:1;transform:rotate(90deg) scale(1.4)}100%{opacity:1;transform:rotate(90deg) scale(1)}}
-        @keyframes sparkle{0%{opacity:0;transform:scale(0)}25%{opacity:1;transform:scale(1.4)}60%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(0) translateY(-4px)}}
+        @keyframes twinkle{0%{opacity:0;scale:0;rotate:-25deg}35%{opacity:1;scale:1.25;rotate:0deg}55%{opacity:.85;scale:.8}75%{opacity:1;scale:1.05}100%{opacity:0;scale:0;rotate:35deg}}
         .rail-nav-link.is-current{color:var(--text);font-weight:600}
         .floating-nav{position:fixed;top:32px;left:60px;z-index:100}
         .peek{position:fixed;left:0;top:0;z-index:90;pointer-events:none;will-change:transform}
-        .peek-in{position:relative;background:#fff;padding:5px;border:1px solid rgba(26,26,24,.1);box-shadow:0 14px 32px -14px rgba(26,26,24,.4);opacity:0;transform:scale(.86);transform-origin:left center;transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1)}
-        .peek.is-on .peek-in{opacity:1;transform:none}
+        .peek-in{position:relative;background:#fff;padding:5px;border:1px solid rgba(26,26,24,.1);box-shadow:0 14px 32px -14px rgba(26,26,24,.4);opacity:0;clip-path:inset(48% 46% 48% 46%);transition:opacity .15s ease,clip-path .2s ease}
+        .peek.is-on .peek-in{opacity:1;clip-path:inset(0);transition:opacity .12s ease,clip-path .55s cubic-bezier(.2,.9,.25,1)}
+        .peek-in img{scale:1.18;transition:scale .7s cubic-bezier(.2,.9,.25,1)}
+        .peek.is-on .peek-in img{scale:1}
+        .peek-glyphs{position:absolute;inset:0;pointer-events:none}
+        .peek-g{position:absolute;display:block;line-height:0;translate:-50% -50%;scale:0;rotate:-90deg;opacity:0;transition:scale .15s ease,rotate .15s ease,opacity .15s ease}
+        .peek.is-on .peek-g{scale:1;rotate:0deg;opacity:.8;transition:scale .5s cubic-bezier(.3,1.5,.5,1) var(--d),rotate .8s cubic-bezier(.2,.9,.25,1) var(--d),opacity .2s ease var(--d)}
+        .peek-g svg{display:block}
+        @media (prefers-reduced-motion:reduce){.peek-in{clip-path:none;transition:opacity .15s}}
         .peek-in img{display:none;max-width:230px;max-height:250px;width:auto;height:auto;-webkit-user-drag:none}
         .peek-in img.is-cur{display:block}
         .sound-toggle{position:fixed;right:24px;bottom:20px;z-index:100;display:flex;align-items:center;gap:8px;padding:6px 2px;background:none;border:0;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-mid)}
@@ -1050,11 +1305,10 @@ export default function Portfolio() {
         .sound-toggle i{width:6px;height:6px;background:var(--text-dim);display:block;transition:background .2s ease}
         .sound-toggle i.is-on{background:#E3000F}
 
-        /* A blocky, stepped underline sweep on hover — reads as pixels assembling left to right,
-           not a smooth wipe. Applied to plain text links across the rail/footer/nav. */
-        .pixel-underline{position:relative}
-        .pixel-underline::after{content:'';position:absolute;left:0;bottom:-3px;height:2px;width:0;background:currentColor;transition:width .28s steps(6,end)}
-        .pixel-underline:hover::after{width:100%}
+        /* underline that draws left to right on hover */
+        .link-underline{position:relative}
+        .link-underline::after{content:'';position:absolute;left:0;bottom:-3px;height:2px;width:0;background:currentColor;transition:width .35s cubic-bezier(.2,.7,.2,1)}
+        .link-underline:hover::after{width:100%}
 
         /* ── Page layout: one grid, one coordinate system for both columns.
            No top padding here — .rail's sticky top:var(--top) and .stack's padding-top:var(--top)
@@ -1074,7 +1328,7 @@ export default function Portfolio() {
           .intro-text{font-size:17px;max-width:340px}
         }
         .brand{font-weight:700;color:#000;transition:color .35s ease}
-        .brand.is-hot .pixel-bullet{transform:scale(1.3);margin-right:6px}
+        .gb-wrap{display:contents}
         .card-cursor{position:fixed;left:0;top:0;z-index:6000;pointer-events:none}
         .card-cursor>div{display:flex;align-items:center;gap:8px;background:#111;color:#fff;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;white-space:nowrap;opacity:0;transform:scale(.85);transform-origin:top left;transition:opacity .15s ease, transform .15s ease}
         .card-cursor>div i{width:6px;height:6px;background:var(--c,#fff)}
@@ -1088,7 +1342,7 @@ export default function Portfolio() {
         .card-media::after{content:'';position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .4s ease;background:radial-gradient(circle at var(--gx,50%) var(--gy,50%),rgba(255,255,255,.28),rgba(255,255,255,0) 55%)}
         .card:hover .card-media::after{opacity:1}
         @media (hover:none),(prefers-reduced-motion:reduce){.card-tilt{transform:none!important;translate:none!important}.card-media::after{display:none}}
-        .brand .pixel-bullet{margin-right:4px;vertical-align:middle}
+        .brand .gbullet{margin-right:0;vertical-align:-4.5px}
 
         .rail-rule{height:1px;background:var(--border)}
         .rail-label{font-size:11px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim)}
@@ -1124,11 +1378,11 @@ export default function Portfolio() {
         .card-badge{position:absolute;top:16px;left:16px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;background:rgba(245,242,238,.95);color:#1A1A18;padding:5px 10px;border-radius:20px}
 
         .card-body{padding:20px 2px 0;container-type:inline-size}
-        .card-company{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-mid);display:inline-flex;align-items:center;gap:7px;margin-bottom:8px}
+        .card-company{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-mid);display:inline-flex;align-items:center;gap:4px;margin-bottom:8px}
         /* Active-card indicator — brand-colored per card (set inline via c.color), dimmed until
            this card is the one nearest viewport-center */
-        .pixel-bullet{display:inline-block;width:6px;height:6px;flex-shrink:0;opacity:.4;transition:opacity .2s}
-        .pixel-bullet.is-active{opacity:1}
+        .gbullet{display:inline-block;width:18px;height:18px;flex-shrink:0;opacity:.4;transition:opacity .2s}
+        .gbullet.is-active{opacity:1}
         .card-title{font-size:clamp(15px,2.7cqw,24px);font-weight:400;line-height:1.2;letter-spacing:-.02em;margin-bottom:8px}
         .card-desc{max-width:560px;font-size:12.5px;line-height:1.6;color:var(--text-mid);margin-bottom:14px}
         .card-metrics{display:flex;gap:20px;padding-top:12px;border-top:1px solid rgba(26,26,24,.08)}
@@ -1181,17 +1435,13 @@ export default function Portfolio() {
         .bento-title{font-size:14px;font-weight:600;letter-spacing:-.01em}
 
         /* ── About: clean and calm, same width as the Work page ── */
-        .about-page{max-width:1160px;margin:0 auto;padding:var(--top) 60px 96px;display:flex;flex-direction:column;gap:64px}
+        .about-page{max-width:1160px;margin:0 auto;padding:72px 60px 96px;display:flex;flex-direction:column;gap:64px}
         .wf-block{background:rgba(26,26,24,.06);border:1px solid var(--border)}
         .wf-divider{height:1px;background:var(--border)}
 
-        .about-hero{display:flex;gap:40px;align-items:stretch}
-        .about-photo{width:320px;height:auto;align-self:stretch;object-fit:cover;object-position:center 38%;flex-shrink:0;display:block}
-        .about-hero-text{flex:1;padding-top:4px;display:flex;flex-direction:column;gap:10px}
         .about-name{font-size:32px;font-weight:400;letter-spacing:-.02em;line-height:1.1}
         .about-tagline{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
         .about-bio{font-size:16px;line-height:1.75;color:var(--text-mid);max-width:620px}
-        .px-inline{display:inline-block;height:1.75em;vertical-align:top;margin:0 .1em}
 
         /* plain resume rows — company, title, date. nothing else. */
         .ad{position:fixed;inset:0;z-index:4000;background:rgba(26,26,24,.5);display:flex;align-items:center;justify-content:center;padding:32px 16px;animation:adIn .25s ease}
@@ -1238,13 +1488,80 @@ export default function Portfolio() {
         @media (min-width:1900px){.kind-sec{max-width:1560px;grid-template-columns:360px 1fr;gap:96px}}
         .kind figcaption{margin-top:14px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.04em;color:var(--text-dim);display:flex;gap:10px;flex-wrap:wrap}
         .kind figcaption strong{color:var(--text);font-weight:500}
+        /* About canvas: no frame, edge to edge under the nav. One big surface: drag it to look around. */
+        .ac{--k:1;--ox:0px;--oy:0px;position:relative;display:flex;flex-direction:column;height:1040px;overflow:clip;cursor:grab;border-bottom:1px solid #1A1A18;touch-action:pan-y;
+          background-image:radial-gradient(rgba(26,26,24,.2) 1.1px,transparent 1.5px);background-size:26px 26px;background-position:var(--ox) var(--oy)}
+        .ac{user-select:none;-webkit-user-select:none}
+        .ac.is-drag{cursor:grabbing}
+        .ac-world{position:absolute;left:0;top:0;width:100%;height:100%;translate:0 0}
+        .ac-item{position:absolute;margin:0}
+        /* clean, modern stickies: flat tint, no tape or tilt, a mono file-name tag */
+        .ac-sticky{display:flex;flex-direction:column;gap:12px;padding:26px 30px 30px;background:var(--tint);border:1px solid rgba(26,26,24,.09)}
+        .ac-sticky-tag{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;color:rgba(26,26,24,.5)}
+        .ac-sticky .about-name{font-size:30px}
+        .ac-sticky .about-tagline{color:rgba(26,26,24,.55)}
+        .ac-sticky .about-bio{font-size:14.5px;line-height:1.65;color:#2A2A26}
+        .ac-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;color:var(--text-dim)}
+        .ac-flower{line-height:0}
+        .ac-photo{background:#fff;padding:7px 7px 8px;border:1px solid rgba(26,26,24,.12);transition:scale .3s cubic-bezier(.3,1.4,.5,1)}
+        .ac-photo:hover{scale:1.03;z-index:20}
+        .ac-photo img{display:block;width:100%;height:auto;-webkit-user-drag:none}
+        .ac-photo figcaption{padding-top:8px}
+        .ac-title{display:block;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.02em;color:var(--text-mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .ac-hint{position:absolute;left:24px;bottom:30px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);pointer-events:none}
+        .b-pin{position:absolute;left:50%;top:-7px;width:13px;height:13px;border-radius:50%;translate:-50% 0;box-shadow:inset -2px -2px 0 rgba(0,0,0,.18)}
+        /* ink impressions: one-color prints that sink into the photo */
+        .ac-stk{position:absolute;translate:-50% -50%;line-height:0;pointer-events:none;mix-blend-mode:multiply;opacity:.9;filter:url(#ink-rough);animation:inkIn .35s cubic-bezier(.2,.9,.3,1) both}
+        @keyframes inkIn{from{scale:1.3;opacity:0}to{scale:1;opacity:.9}}
+        @keyframes stkIn{from{scale:.3;opacity:0}to{scale:1;opacity:1}}
+        .st-smile{display:inline-flex;align-items:center;justify-content:center;rotate:90deg;font-family:'DM Mono',monospace;font-weight:500;letter-spacing:.05em;line-height:1}
+        .ac.is-armed,.ac.is-armed .ac-photo.is-votable{cursor:none}
+        .ac.is-armed .ac-photo.is-votable{outline:1.5px dashed rgba(26,26,24,.35);outline-offset:3px}
+        .ac.is-armed .ac-photo.is-votable:hover{outline-color:var(--pin);scale:1}
+        .ac-dock{position:sticky;bottom:22px;margin:auto auto 0;z-index:60;display:flex;align-items:center;padding:5px;background:#fff;border:1px solid #1A1A18;cursor:default}
+        .ac-stamp-btn{position:relative;display:flex;align-items:center;gap:10px;height:48px;padding:0 14px 0 12px;background:none;border:0;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text)}
+        .ac-stamp-btn:hover:not(:disabled){background:rgba(26,26,24,.06)}
+        .ac-stamp-btn.is-on{background:#1A1A18;color:#fff}
+        .ac-stamp-btn.is-on .stamp-tool rect:not(:last-child){fill:#fff}
+        .ac-stamp-btn:disabled{opacity:.4;cursor:default}
+        .ac-stamp-btn b{font-weight:500;font-size:10px;margin-left:2px;color:var(--text-dim)}
+        .ac-stamp-btn.is-on b{color:rgba(255,255,255,.6)}
+        .ac-stamps{position:absolute;left:0;bottom:calc(100% + 10px);display:grid;grid-template-columns:repeat(4,52px);gap:2px;padding:6px;background:#fff;border:1px solid #1A1A18;animation:stkIn .3s cubic-bezier(.3,1.5,.5,1) both;transform-origin:bottom left}
+        .ac-stamps button{display:flex;align-items:center;justify-content:center;width:52px;height:52px;background:none;border:0;padding:0;cursor:pointer;transition:background .15s ease,scale .25s cubic-bezier(.3,1.5,.5,1)}
+        .ac-stamps button:hover{background:rgba(26,26,24,.06);scale:1.1}
+        .ac-stamps button.is-on{background:rgba(26,26,24,.1)}
+        .ac-dock-tip{position:absolute;left:50%;bottom:calc(100% + 10px);translate:-50% 0;white-space:nowrap;padding:6px 10px;background:#1A1A18;color:#fff;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;animation:stkIn .5s .6s cubic-bezier(.3,1.5,.5,1) both}
+        .ac-ghost{position:fixed;left:0;top:0;z-index:7000;pointer-events:none;opacity:0;transition:opacity .15s ease;line-height:0}
+        .ac-ghost>*{display:block;translate:-50% -88%;rotate:-6deg;transform-origin:50% 88%;transition:scale .12s ease,translate .12s ease}
+        .ac-ghost.is-press>*{scale:.94;translate:-50% -80%}
+        .map{position:relative;width:100%}
+        .map-svg{position:absolute;inset:0;width:100%;height:100%;overflow:hidden}
+        .map-land{fill:none;stroke:#CFC7B8;stroke-width:4.6;stroke-linecap:round}
+        .map-stop{position:absolute;width:0;height:0}
+        .map-flower{position:absolute;left:-17px;top:-17px;line-height:0;cursor:default}
+        .map-flower:hover{z-index:5}
+        .map-label{position:absolute;left:50%;bottom:calc(100% + 8px);translate:-50% 4px;display:flex;flex-direction:column;gap:2px;white-space:nowrap;padding:6px 10px;background:#1A1A18;color:#fff;opacity:0;pointer-events:none;transition:opacity .2s ease,translate .25s cubic-bezier(.3,1.4,.5,1);line-height:1.2}
+        .map-flower:hover .map-label{opacity:1;translate:-50% 0}
+        .map-label b{font-family:'thermal-variable','Open Sauce Sans',sans-serif;font-weight:400;font-size:17px;letter-spacing:-.01em}
+        .map-label span{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.7)}
+        .map-label em{font-style:normal;color:#1A1A18;background:#fff;padding:1px 6px}
+        .places-list{display:none;list-style:none;margin:0;padding:0}
+        @media (max-width:860px){
+          .ac{height:auto;padding:84px 18px 70px;cursor:auto;touch-action:auto;background-position:0 0}
+          .ac-world{position:static;display:grid;grid-template-columns:1fr 1fr;gap:22px 16px;align-items:start;translate:none!important}
+          .ac-item{position:relative;left:auto!important;top:auto!important;width:auto!important;rotate:0deg!important}
+          .ac-sticky,.ac-label{grid-column:1 / -1}
+          .ac-flower,.ac-hint{display:none}
+          .ac-dock{position:sticky;bottom:12px;margin:24px auto 0}
+          .places-list{display:grid;gap:12px;margin-top:20px}
+          .places-list li{font-size:15px;color:var(--text)}
+          .places-list li span{display:block;margin-top:2px;font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
+        }
         .about-block{display:flex;flex-direction:column;gap:24px;border-top:1px solid #1A1A18;padding-top:24px}
         .about-label{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);align-self:start;padding-top:3px}
         .about-label i,.about-dot{display:inline-block;width:6px;height:6px;flex-shrink:0}
         .about-label i{background:#1A1A18}
         .about-dot{align-self:center}
-        .hobby-row{display:flex;gap:8px;align-items:flex-start;min-width:0}
-        .hobby-img{display:block;flex:1 1 0;min-width:0;width:100%;height:auto;object-fit:cover}
         .about-list{display:flex;flex-direction:column}
         .about-item{display:flex;justify-content:space-between;align-items:baseline;gap:20px;padding:16px 0;border-bottom:1px solid rgba(26,26,24,.08)}
         .about-item:first-child{padding-top:0}
@@ -1257,13 +1574,9 @@ export default function Portfolio() {
         @media (max-width:860px){
           .about-page{padding:72px 24px 60px}
           .floating-nav{top:24px;left:24px}
-          .about-hero{flex-direction:column}
-          .about-photo{width:220px;height:auto;aspect-ratio:4/5;align-self:flex-start}
-          .about-item{flex-direction:column;gap:4px}
+              .about-item{flex-direction:column;gap:4px}
           .about-sec{grid-template-columns:1fr;gap:20px}
-          .hobby-row{flex-wrap:wrap}
-          .hobby-img{flex:1 1 40%}
-        }
+          }
 
         @media (max-width:860px){
           .archive-page{--gap:6px;padding-top:72px}
@@ -1282,9 +1595,7 @@ export default function Portfolio() {
 
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:rgba(26,26,24,.12);border-radius:2px}
 
-        .loader{position:fixed;inset:0;z-index:5000;display:grid;background:transparent}
-        .loader-cell{animation:pixelOut .7s ease-in-out forwards}
-        @keyframes pixelOut{to{opacity:0}}
+        .loader{position:fixed;inset:0;z-index:5000;width:100vw;height:100vh;display:block}
 
         @media (max-width: 860px){
           html{scroll-snap-type:none}
@@ -1300,10 +1611,10 @@ export default function Portfolio() {
         }
       `}</style>
 
-      {loading && <Loader onDone={finishLoading} />}
+      {loading && <Loader onDone={finishLoading} quiet={quietBg} />}
       <CardCursor />
 
-      <PixelTrail />
+      {!loading && page !== 'about' && <BackgroundField quiet={quietBg} />}
       <SoundToggle />
       <PeekCard />
 
@@ -1366,20 +1677,9 @@ export default function Portfolio() {
 
       {page === 'about' && (
       /* ── About: clean, resume-style — company / title / date rows, same width as the Work page ── */
+      <>
+      <AboutCanvas />
       <section id="about" className="about-page">
-        <div className="about-hero">
-          <img src={PROFILE_IMG} alt="Jayden Kang" className="about-photo" />
-          <div className="about-hero-text">
-            <h1 className="about-name">Hey, I'm Jayden!</h1>
-            <span className="about-tagline">Product Designer · Inclusive UX · Systems Thinking</span>
-            {ABOUT_STORY.map((segs, i) => (
-              <p className="about-bio" key={i}>
-                {segs.map((seg, j) => (typeof seg === 'string' ? seg : <PixelArt key={j} {...seg} />))}
-              </p>
-            ))}
-          </div>
-        </div>
-
         <div className="about-sec">
         <span className="about-label"><i />Experience</span>
         <div className="about-list">
@@ -1420,10 +1720,11 @@ export default function Portfolio() {
         </div>
 
         <div className="about-block">
-        <span className="about-label"><i />Outside of Design</span>
-        <HobbyRow />
+        <span className="about-label"><i />Places</span>
+        <Places />
         </div>
       </section>
+      </>
       )}
 
       <SiteFooter snapEnd={page === 'home'} />
