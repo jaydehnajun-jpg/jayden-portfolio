@@ -30,21 +30,10 @@ function ensure() {
   master = ctx.createGain(); master.gain.value = MASTER;
   const comp = ctx.createDynamicsCompressor();   // lets the master gain be generous without clipping when notes overlap
   master.connect(comp); comp.connect(ctx.destination);
-  ctx.onstatechange = () => subs.forEach((fn) => fn(on));
   return ctx;
 }
 
-// Is audio allowed to play right now? (false until the visitor has clicked or pressed a key, unless the browser allows autoplay)
-export const isReady = () => { const c = ensure(); return !!c && c.state === 'running'; };
-// Start audio from inside a gesture; resolves once it is running (or has failed)
-export function unlockAudio() {
-  const c = ensure();
-  if (!c) return Promise.resolve(false);
-  if (c.state === 'running') return Promise.resolve(true);
-  return c.resume().then(() => c.state === 'running', () => false);
-}
-
-// unlock on the first real gesture
+// unlock on the first real gesture (a click, tap or key press; browsers do not allow sound before that)
 const unlock = () => { const c = ensure(); if (c && c.state === 'suspended') c.resume(); };
 if (typeof window !== 'undefined') {
   ['pointerdown', 'pointerup', 'click', 'keydown', 'touchstart', 'touchend'].forEach((e) => window.addEventListener(e, unlock, { once: false, passive: true }));
@@ -117,3 +106,5 @@ export function playSparkle(startMs, spanMs, count = 28) {
     setTimeout(() => play('chime', Math.floor(Math.random() * 7)), d);
   }
 }
+
+if (typeof window !== 'undefined') ensure();   // try to start audio at load: it runs straight away where the browser allows sound without a click

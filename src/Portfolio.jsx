@@ -16,7 +16,7 @@ import AdobeAnim from "./AdobeAnim.jsx";
 import AdobeVisionAnim from "./AdobeVisionAnim.jsx";
 import { AnimImg } from "./caseKit.jsx";
 import { MapsAnim, AACAnim, ZuoraAnim, NordAnim } from "./ExpAnims.jsx";
-import { play, playBloom, playSparkle, isOn, setOn, subscribe, isReady, unlockAudio } from "./sound.js";
+import { play, playBloom, playSparkle } from "./sound.js";
 
 // Dev-only sandbox for 3D ideas (#/lab). Tree-shaken out of production builds.
 const Lab3D = import.meta.env.DEV ? lazy(() => import("./Lab3D.jsx")) : null;
@@ -788,32 +788,12 @@ function Loader({ onDone, quiet }) {
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
   const t0 = useRef(fieldTime()).current;
-  const rel = useRef(null);            // when the curtain starts to clear (null = still holding)
-  const [gate, setGate] = useState(false);
   const HOLD = 1.7, CLEAR = 1.5;   // seconds: breathing in, then clearing outward
-  // Browsers keep audio locked until the visitor clicks or presses a key, so the chimes would never be heard if the intro ran by
-  // itself. If audio is locked, the intro holds (breathing) with a "click to enter with sound" hint: a click unlocks the sound and
-  // the curtain clears with the chimes. If nobody clicks within a few seconds it carries on silently.
+  const rel = useRef(t0 + HOLD);   // when the curtain starts to clear
   useEffect(() => {
-    let done = false, wait = 0, fin = 0;
-    const release = (hold, chimes) => {
-      if (done) return;
-      done = true; clearTimeout(wait); setGate(false);
-      rel.current = fieldTime() + hold;
-      if (chimes) playSparkle(0, (hold + CLEAR) * 1000);
-      fin = setTimeout(() => onDoneRef.current(), (hold + CLEAR + 0.15) * 1000);
-    };
-    const ev = ['pointerdown', 'keydown'];
-    const go = () => { off(); unlockAudio().then(() => release(0.9, true)); };
-    const off = () => ev.forEach((e) => window.removeEventListener(e, go));
-    if (!isOn()) release(HOLD, false);
-    else if (isReady()) release(HOLD, true);
-    else {
-      setGate(true);
-      ev.forEach((e) => window.addEventListener(e, go));
-      wait = setTimeout(() => { off(); release(0.4, false); }, 4800);
-    }
-    return () => { done = true; off(); clearTimeout(wait); clearTimeout(fin); };
+    playSparkle(0, (HOLD + CLEAR) * 1000);   // chimes from the very start. Browsers only allow sound after a click or key press, unless the site is allowed to play sound
+    const id = setTimeout(() => onDoneRef.current(), (HOLD + CLEAR + 0.15) * 1000);
+    return () => clearTimeout(id);
   }, []);
   // Each cell clears on its own schedule: a loose pull from the centre outward, mostly scatter, so the
   // curtain breaks up irregularly (like pixels dropping out) instead of sweeping away as one clean edge.
@@ -827,7 +807,7 @@ function Loader({ onDone, quiet }) {
   // 1 = still part of the curtain, 0 = cleared (now just the page background)
   const keep = (i, j, cx, cy, w, h, T) => {
     const R = rel.current;
-    if (R === null || T <= R) return 1;
+    if (T <= R) return 1;
     const th = clearAt(i, j, cx, cy, w, h) * (1 - WIN), p = (T - R) / CLEAR;
     return 1 - smoothstep(th, th + WIN, p);
   };
@@ -835,7 +815,7 @@ function Loader({ onDone, quiet }) {
   // them and is drawn from a tiny per-cell map scaled up smoothly, so no square ever shows as it disappears.
   const sheet = useRef(null);
   const sheetKeep = (i, j, cx, cy, w, h, T) => {
-    const R = rel.current, p = R === null ? 0 : (T - R) / CLEAR;
+    const R = rel.current, p = (T - R) / CLEAR;
     if (p <= 0) return 1;
     const st = clearAt(i, j, cx, cy, w, h) * 0.55;
     return 1 - smoothstep(st, st + 0.35, p);
@@ -854,7 +834,7 @@ function Loader({ onDone, quiet }) {
     // cream sheet under the glyphs (smooth, see sheetKeep)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#F5F2EE';
-    if (rel.current === null || T <= rel.current) { ctx.fillRect(0, 0, w, h); return; }
+    if (T <= rel.current) { ctx.fillRect(0, 0, w, h); return; }
     const cols = Math.ceil(w / cell) + 1, rows = Math.ceil(h / cell) + 1;
     if (!sheet.current) sheet.current = document.createElement('canvas');
     const sc = sheet.current;
@@ -870,12 +850,7 @@ function Loader({ onDone, quiet }) {
     ctx.drawImage(sc, 0, 0, cols * cell, rows * cell);
     ctx.globalAlpha = 1;
   };
-  return (
-    <>
-      <ParamField className="loader" cell={FIELD_CELL} alpha={1} aFn={aFn} sFn={sFn} bFn={bFn} pre={pre} fps={45} />
-      {gate && <div className="loader-hint" aria-live="polite"><span>Click anywhere to enter, with sound</span></div>}
-    </>
-  );
+  return <ParamField className="loader" cell={FIELD_CELL} alpha={1} aFn={aFn} sFn={sFn} bFn={bFn} pre={pre} fps={45} />;
 }
 const smoothstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -896,7 +871,7 @@ const bgBloom = (m, cx, cy) => { const d = Math.hypot(cx - m.x, cy - m.y); retur
 // Poking the empty background wakes the field up: a click sends a ripple of blooms across it and lifts its color for a few seconds,
 // and resting on empty background for 3 seconds does too. The color rises to about 80% at the centre of the bloom and fades out with
 // distance (not at the rim). Both ease back.
-const BG_CONTENT = 'a,button,input,textarea,select,label,p,h1,h2,h3,h4,li,blockquote,figure,img,video,svg:not(.field-canvas),.card,.kind,.glyph-band,.site-footer,.rail-nav,.sound-toggle,.peek,[data-peek],.map,.places';
+const BG_CONTENT = 'a,button,input,textarea,select,label,p,h1,h2,h3,h4,li,blockquote,figure,img,video,svg:not(.field-canvas),.card,.kind,.glyph-band,.site-footer,.rail-nav,.peek,[data-peek],.map,.places';
 const onBg = (el) => !(el && el.closest && el.closest(BG_CONTENT));
 const bgFx = { boost: 0, since: 0, ripples: [] };
 const bgFxStep = () => {
@@ -1050,20 +1025,8 @@ function PeekCard() {
   );
 }
 
-// Corner switch for the UI sounds (see sound.js). Remembered between visits.
-function SoundToggle() {
-  const [on, setLocal] = useState(isOn());
-  const [ready, setReady] = useState(false);
-  useEffect(() => { setReady(isReady()); return subscribe((v) => { setLocal(v); setReady(isReady()); }); }, []);
-  return (
-    <button type="button" className="sound-toggle" onClick={() => setOn(!on)} aria-pressed={on} aria-label={on ? 'Turn sound off' : 'Turn sound on'}>
-      <i className={on && ready ? 'is-on' : ''} />{on ? (ready ? 'Sound on' : 'Click for sound') : 'Sound off'}
-    </button>
-  );
-}
-
 // Which elements get which sound. Delegated from the document so the individual components stay untouched.
-const HOVER_SOUND = '[data-peek], .card, .rail-nav-link, .ad-close, .sound-toggle';
+const HOVER_SOUND = '[data-peek], .card, .rail-nav-link, .ad-close';
 const NAV_SOUND = { '#work-0': 'navWork', '#experimentation': 'navTinker', '#handmade': 'navAbout', '#about': 'navAbout' };
 const CLICK_SOUND = 'a, button, [role="button"], .card, .bento-tile.is-link';
 
@@ -1087,13 +1050,13 @@ export default function Portfolio() {
       const t = e.target.closest && e.target.closest(HOVER_SOUND);
       if (t === over) return;
       over = t;
-      if (t && !t.classList.contains('sound-toggle')) play(t.classList.contains('rail-nav-link') ? NAV_SOUND[t.getAttribute('href')] || 'hover' : 'hover');
+      if (t) play(t.classList.contains('rail-nav-link') ? NAV_SOUND[t.getAttribute('href')] || 'hover' : 'hover');
     };
     let navAt = -1e9;   // the top nav keeps its hover sound but is silent on click (and on the page change it causes)
     const onClick = (e) => {
       if (!e.target.closest) return;
       if (e.target.closest('.rail-nav-link')) { navAt = performance.now(); return; }
-      if (e.target.closest(CLICK_SOUND) && !e.target.closest('.sound-toggle')) play('click');
+      if (e.target.closest(CLICK_SOUND)) play('click');
     };
     const onHash = () => { if (performance.now() - navAt > 500) play('swish'); };
     document.addEventListener('pointerover', onOver);
@@ -1176,7 +1139,6 @@ export default function Portfolio() {
         @keyframes vtOut{to{opacity:0}}
         @keyframes vtIn{from{opacity:0;transform:translateY(6px)}}
         .floating-nav{view-transition-name:site-nav}
-        .sound-toggle{view-transition-name:sound-toggle}
         h1,h2,h3{font-family:'thermal-variable','Open Sauce Sans',sans-serif;font-weight:400}
 
         /* parametric glyph field behind the page, and the same canvas as the loading curtain */
@@ -1228,10 +1190,6 @@ export default function Portfolio() {
         @media (prefers-reduced-motion:reduce){.peek-in{clip-path:none;transition:opacity .15s}}
         .peek-in img{display:none;max-width:230px;max-height:250px;width:auto;height:auto;-webkit-user-drag:none}
         .peek-in img.is-cur{display:block}
-        .sound-toggle{position:fixed;right:24px;bottom:20px;z-index:100;display:flex;align-items:center;gap:8px;padding:6px 2px;background:none;border:0;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-mid)}
-        .sound-toggle:hover{color:var(--text)}
-        .sound-toggle i{width:6px;height:6px;background:var(--text-dim);display:block;transition:background .2s ease}
-        .sound-toggle i.is-on{background:#E3000F}
 
         /* underline that draws left to right on hover */
         .link-underline{position:relative}
@@ -1511,9 +1469,6 @@ export default function Portfolio() {
         ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:rgba(26,26,24,.12);border-radius:2px}
 
         .loader{position:fixed;inset:0;z-index:5000;width:100vw;height:100vh;display:block}
-        .loader-hint{position:fixed;left:0;right:0;bottom:12vh;z-index:5001;display:flex;justify-content:center;pointer-events:none;animation:loaderHint .6s ease .5s both}
-        .loader-hint span{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text);background:var(--bg);padding:8px 14px}
-        @keyframes loaderHint{from{opacity:0}to{opacity:1}}
 
         @media (max-width: 860px){
           html{scroll-snap-type:none}
@@ -1533,7 +1488,6 @@ export default function Portfolio() {
       <CardCursor />
 
       {!loading && <BackgroundField quiet={quietBg} />}
-      <SoundToggle />
       <PeekCard />
 
       <div className="floating-nav">
